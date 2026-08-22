@@ -1,5 +1,7 @@
 package com.bjarne.videoservice.identity;
 
+import com.bjarne.videoservice.shared.RateLimiter;
+import com.bjarne.videoservice.shared.exceptions.TooManyRequestsException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -8,11 +10,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.web.bind.annotation.CookieValue;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -24,13 +22,19 @@ public class AuthController {
     private static final String REFRESH_COOKIE_PATH = "/api/auth";
 
     private final AuthService authService;
+    private final RateLimiter rateLimiter;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, RateLimiter rateLimiter) {
         this.authService = authService;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping("/api/auth/register")
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request,
+                                                  HttpServletRequest httpRequest) {
+        if (!rateLimiter.tryConsumeRegister(httpRequest.getRemoteAddr())) {
+            throw new TooManyRequestsException("Zu viele Registrierungen - bitte spaeter erneut versuchen");
+        }
         UserResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -38,6 +42,9 @@ public class AuthController {
     @PostMapping("/api/auth/login")
     public ResponseEntity<AccessTokenResponse> login(@Valid @RequestBody LoginRequest request,
                                                        HttpServletRequest httpRequest) {
+        if (!rateLimiter.tryConsumeLogin(httpRequest.getRemoteAddr())) {
+            throw new TooManyRequestsException("Zu viele Login-Versuche - bitte spaeter erneut versuchen");
+        }
         AuthService.LoginResult result = authService.login(request, httpRequest.getHeader(HttpHeaders.USER_AGENT));
         ResponseCookie cookie = refreshCookie(result.refreshToken(), Duration.ofDays(30));
         return ResponseEntity.ok()

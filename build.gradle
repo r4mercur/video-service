@@ -30,6 +30,8 @@ dependencies {
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'software.amazon.awssdk:s3:2.54.2'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+    implementation 'com.bucket4j:bucket4j-core:8.10.1'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
@@ -56,16 +58,18 @@ dependencies {
 // (Docker-Desktop/WSL2-Netzwerk-Symptom, Ursache bewusst nicht behoben - siehe Analyse). Ein Test,
 // der deswegen einmalig fehlschlaegt und beim Retry sauber durchlaeuft, ist kein echter Bug -
 // maxFailures begrenzt das auf einen einzelnen Ausreisser-Batch, damit ein tatsaechlich kaputter
-// Test (der auch bei jedem Retry scheitert) den Build weiterhin zuverlaessig rot macht. 40 statt
-// niedriger, weil die Flakiness beobachtet auch mal 2-3 ganze Klassen auf einmal treffen kann
-// (schon 20 Fehlschlaege in einem einzelnen Lauf gesehen) - bei zu knappem Cap deaktiviert das
-// Plugin den Retry fuer die gesamte Runde genau dann, wenn er am meisten gebraucht wird.
+// Test (der auch bei jedem Retry scheitert) den Build weiterhin zuverlaessig rot macht. 40 war fuer
+// die Suite bis AP6 (~72 Tests) ausreichend (schon 20 Fehlschlaege in einem einzelnen Lauf gesehen);
+// seit AP7 (85 Tests, mehrere zusaetzliche Testcontainers-lastige Klassen) reichte der Cap bei einem
+// schlechten Batch nicht mehr aus - beobachtet wurden bei einem vollen Lauf ueber alle Retries
+// summiert bis zu ~55 Fehlschlaege, bevor das Plugin den Retry fuer die gesamte Runde abschaltet
+// (genau dann, wenn er am meisten gebraucht wird). 100 statt 40, mit Puffer nach oben.
 tasks.withType(Test).configureEach {
     systemProperty 'spring.datasource.hikari.connection-timeout', '3000'
     systemProperty 'spring.datasource.hikari.validation-timeout', '3000'
     retry {
         maxRetries = 2
-        maxFailures = 40
+        maxFailures = 100
         failOnPassedAfterRetry = false
     }
 }

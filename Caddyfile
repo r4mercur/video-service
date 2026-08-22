@@ -1,0 +1,37 @@
+# Lokale Dev-Config (AP6). Automatisches TLS kommt erst in AP8 mit echter Domain -
+# hier bewusst nur Klartext-HTTP auf Port 80 fuer docker-compose.
+#
+# host.docker.internal funktioniert unter Docker Desktop (Windows/Mac) nativ; extra_hosts
+# in compose.yaml macht das auch unter Linux-Docker portabel.
+
+:80 {
+	@api path /api/*
+	handle @api {
+		reverse_proxy host.docker.internal:8080
+	}
+
+	# Oeffentliche HLS-Renditions/Thumbnails/Sprite-Sheets: Caddy reicht anonym an den Bucket
+	# durch (siehe S3BucketInitializer#ensureBucketPublicReadPolicy fuer die noetige Policy).
+	# "private/" laeuft NICHT hierueber - dafuer generiert das Backend presignte URLs.
+	@publicAssets path /public/*
+	handle @publicAssets {
+		# Bucket-Name muss zu app.storage.bucket (application.properties) passen.
+		rewrite * /{$STORAGE_BUCKET:video-service}{uri}
+
+		@segments path *.m4s *.mp4 *.jpg
+		header @segments Cache-Control "public, immutable, max-age=31536000"
+
+		# Kuerzer als die Segmente: eine gesperrte/geloeschte Playlist soll nicht ein Jahr lang
+		# aus dem Browser-Cache weiter ausgeliefert werden (DSA-Meldeverfahren, AP7).
+		@playlists path *.m3u8
+		header @playlists Cache-Control "public, max-age=300"
+
+		reverse_proxy minio:9000
+	}
+
+	# "private/*" und alles andere landet bewusst hier, nicht beim Bucket - private Objekte
+	# werden ausschliesslich ueber presignte Backend-URLs ausgeliefert (delivery-Paket).
+	handle {
+		respond 404
+	}
+}

@@ -1,14 +1,16 @@
 package com.bjarne.videoservice.catalog;
 
+import com.bjarne.videoservice.delivery.MediaUrlResolver;
+
 import java.time.Instant;
 import java.util.UUID;
 
-public record VideoSummaryDto(UUID id, String slug, String title, String thumbnailKey, Integer durationSeconds,
+public record VideoSummaryDto(UUID id, String slug, String title, String thumbnailUrl, Integer durationSeconds,
                                String categorySlug, String ownerUsername, Instant publishedAt) {
 
-    public static VideoSummaryDto from(Video video) {
-        return new VideoSummaryDto(video.getId(), video.getSlug(), video.getTitle(), video.getThumbnailKey(),
-                video.getDurationSeconds(), video.getCategory().getSlug(), video.getUser().getUsername(),
-                video.getPublishedAt());
+    public static VideoSummaryDto from(Video video, MediaUrlResolver urlResolver) {
+        return new VideoSummaryDto(video.getId(), video.getSlug(), video.getTitle(),
+                urlResolver.resolve(video.getVisibility(), video.getThumbnailKey()), video.getDurationSeconds(),
+                video.getCategory().getSlug(), video.getUser().getUsername(), video.getPublishedAt());
     }
 }

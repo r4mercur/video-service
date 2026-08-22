@@ -1,5 +1,6 @@
 package com.bjarne.videoservice.catalog;
 
+import com.bjarne.videoservice.delivery.MediaUrlResolver;
 import com.bjarne.videoservice.identity.User;
 import com.bjarne.videoservice.identity.UserRepository;
 import com.bjarne.videoservice.shared.CursorCodec;
@@ -33,12 +34,14 @@ public class CatalogService {
     private final VideoRepository videoRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
+    private final MediaUrlResolver urlResolver;
 
     public CatalogService(VideoRepository videoRepository, CategoryRepository categoryRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository, MediaUrlResolver urlResolver) {
         this.videoRepository = videoRepository;
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
+        this.urlResolver = urlResolver;
     }
 
     public List<CategoryDto> categories() {
@@ -61,7 +64,7 @@ public class CatalogService {
         CursorCodec.Cursor decoded = decodeCursor(cursor);
         List<Video> videos = videoRepository.findPublicFeed(categoryId, decoded.timestamp(), decoded.id(),
                 PageRequest.of(0, pageSize + 1));
-        return buildPage(videos, pageSize, VideoSummaryDto::from, Video::getPublishedAt);
+        return buildPage(videos, pageSize, video -> VideoSummaryDto.from(video, urlResolver), Video::getPublishedAt);
     }
 
     public VideoDetailDto detail(String slug, UUID viewerUserId) {
@@ -69,7 +72,7 @@ public class CatalogService {
         if (!VisibilityPolicy.isVisibleTo(video, viewerUserId)) {
             throw new NotFoundException("Video not found");
         }
-        return VideoDetailDto.from(video);
+        return VideoDetailDto.from(video, urlResolver);
     }
 
     public CursorPage<VideoDetailDto> myVideos(UUID userId, String cursor, Integer limit) {
@@ -77,7 +80,7 @@ public class CatalogService {
         CursorCodec.Cursor decoded = decodeCursor(cursor);
         List<Video> videos = videoRepository.findByUser(userId, decoded.timestamp(), decoded.id(),
                 PageRequest.of(0, pageSize + 1));
-        return buildPage(videos, pageSize, VideoDetailDto::from, Video::getCreatedAt);
+        return buildPage(videos, pageSize, video -> VideoDetailDto.from(video, urlResolver), Video::getCreatedAt);
     }
 
     public CursorPage<VideoSummaryDto> channel(String username, String cursor, Integer limit) {
@@ -87,7 +90,7 @@ public class CatalogService {
         CursorCodec.Cursor decoded = decodeCursor(cursor);
         List<Video> videos = videoRepository.findPublicByUser(owner.getId(), decoded.timestamp(), decoded.id(),
                 PageRequest.of(0, pageSize + 1));
-        return buildPage(videos, pageSize, VideoSummaryDto::from, Video::getPublishedAt);
+        return buildPage(videos, pageSize, video -> VideoSummaryDto.from(video, urlResolver), Video::getPublishedAt);
     }
 
     private CursorCodec.Cursor decodeCursor(String cursor) {

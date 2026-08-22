@@ -20,6 +20,18 @@ services:
       - '9002:9002'
     volumes:
       - 'minio-data:/data'
+  caddy:
+    image: 'caddy:2'
+    ports:
+      - '80:80'
+    volumes:
+      - './Caddyfile:/etc/caddy/Caddyfile'
+    environment:
+      - 'STORAGE_BUCKET=video-service'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      - minio
 
 volumes:
   minio-data:

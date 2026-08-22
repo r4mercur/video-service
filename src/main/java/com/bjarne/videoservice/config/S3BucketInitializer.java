@@ -4,13 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.BucketAlreadyExistsException;
-import software.amazon.awssdk.services.s3.model.BucketAlreadyOwnedByYouException;
-import software.amazon.awssdk.services.s3.model.CORSConfiguration;
-import software.amazon.awssdk.services.s3.model.CORSRule;
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
-import software.amazon.awssdk.services.s3.model.PutBucketCorsRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.*;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -41,6 +35,7 @@ public class S3BucketInitializer {
         try {
             ensureBucketExists();
             ensureBucketCors();
+            ensureBucketPublicReadPolicy();
         } catch (RuntimeException e) {
             bucketReady.set(false);
             throw e;
@@ -83,5 +78,31 @@ public class S3BucketInitializer {
                 throw e;
             }
         }
+    }
+
+    /**
+     * Der "public/"-Prefix wird von Caddy anonym per reverse_proxy an das Storage durchgereicht
+     * (AP6, kein Auth-Header) - ohne eine Bucket-Policy fuer genau diesen Prefix antwortet MinIO/
+     * Garage mit 403. "private/" bleibt bewusst ausgenommen, dort werden Objekte ausschliesslich
+     * ueber presignte URLs mit Ablaufzeit ausgeliefert (siehe delivery-Paket, AP6/9.3).
+     */
+    private void ensureBucketPublicReadPolicy() {
+        String policy = """
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Principal": "*",
+                      "Action": ["s3:GetObject"],
+                      "Resource": ["arn:aws:s3:::%s/public/*"]
+                    }
+                  ]
+                }
+                """.formatted(properties.bucket());
+        s3Client.putBucketPolicy(PutBucketPolicyRequest.builder()
+                .bucket(properties.bucket())
+                .policy(policy)
+                .build());
     }
 }

@@ -1,10 +1,6 @@
 package com.bjarne.videoservice.shared;
 
-import com.bjarne.videoservice.shared.exceptions.ConflictException;
-import com.bjarne.videoservice.shared.exceptions.ForbiddenException;
-import com.bjarne.videoservice.shared.exceptions.NotFoundException;
-import com.bjarne.videoservice.shared.exceptions.UnauthorizedException;
-import com.bjarne.videoservice.shared.exceptions.ValidationException;
+import com.bjarne.videoservice.shared.exceptions.*;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -35,6 +31,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ProblemDetail handleConflict(ConflictException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ProblemDetail handleTooManyRequests(TooManyRequestsException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
     }
 
     @ExceptionHandler(ValidationException.class)

@@ -6,6 +6,10 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.proc.SecurityContext;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -18,15 +22,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
-import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -36,19 +36,11 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatchers;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
+import java.security.*;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -111,7 +103,11 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/categories"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*"),
-                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/users/*/videos")
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/users/*/videos"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/manifest"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/master.m3u8"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/*/playlist.m3u8"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/videos/*/view")
         );
         return request -> {
             String token = delegate.resolve(request);
@@ -129,7 +125,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
-                                                     BearerTokenResolver bearerTokenResolver) throws Exception {
+                                                     BearerTokenResolver bearerTokenResolver,
+                                                     JsonMapper jsonMapper) throws Exception {
         RequestMatcher csrfProtectedPaths = RequestMatchers.anyOf(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/refresh"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout")
@@ -141,13 +138,22 @@ public class SecurityConfig {
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .requireCsrfProtectionMatcher(csrfProtectedPaths)
                 )
+                // CsrfFilter ruft bei einem fehlgeschlagenen Check den ueber ExceptionHandlingConfigurer
+                // konfigurierten AccessDeniedHandler auf. Scope bewusst auf csrfProtectedPaths begrenzt,
+                // damit andere AccessDenied-Faelle (z.B. @PreAuthorize-Ownership-Checks) unveraendert
+                // beim GlobalExceptionHandler landen.
+                .exceptionHandling(exceptions -> exceptions
+                        .defaultAccessDeniedHandlerFor(new CsrfProblemDetailAccessDeniedHandler(jsonMapper),
+                                csrfProtectedPaths))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories", "/api/videos", "/api/videos/*",
-                                "/api/users/*/videos").permitAll()
+                                "/api/users/*/videos", "/api/videos/*/manifest", "/api/videos/*/master.m3u8",
+                                "/api/videos/*/*/playlist.m3u8").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/view").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )
