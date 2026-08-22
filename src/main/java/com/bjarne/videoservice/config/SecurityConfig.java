@@ -35,6 +35,9 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatchers;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -46,6 +49,7 @@ import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -123,9 +127,28 @@ public class SecurityConfig {
         };
     }
 
+    /**
+     * Noetig, sobald das Angular-Frontend (localhost:4200) die API auf einem anderen Origin
+     * (localhost:8080) aufruft - ohne diese Bean blockt der Browser die Requests. allowCredentials
+     * ist erforderlich, damit das HttpOnly-Refresh-Cookie (Abschnitt 8) bei /api/auth/refresh und
+     * /api/auth/logout mitgeschickt wird.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(ApiProperties properties) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(properties.corsAllowedOrigins());
+        configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-XSRF-TOKEN"));
+        configuration.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        return source;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
                                                      BearerTokenResolver bearerTokenResolver,
+                                                     CorsConfigurationSource corsConfigurationSource,
                                                      JsonMapper jsonMapper) throws Exception {
         RequestMatcher csrfProtectedPaths = RequestMatchers.anyOf(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/refresh"),
@@ -133,6 +156,7 @@ public class SecurityConfig {
         );
 
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
