@@ -10,6 +10,7 @@ import com.bjarne.videoservice.config.S3Properties;
 import com.bjarne.videoservice.identity.User;
 import com.bjarne.videoservice.identity.UserRepository;
 import com.bjarne.videoservice.support.AbstractS3IntegrationTest;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Tag("ffmpeg")
 class TranscodeServiceIntegrationTest extends AbstractS3IntegrationTest {
 
     @Autowired

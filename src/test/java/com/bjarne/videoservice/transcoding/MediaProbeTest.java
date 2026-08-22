@@ -2,6 +2,7 @@ package com.bjarne.videoservice.transcoding;
 
 import com.bjarne.videoservice.config.TranscodeProperties;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Tag("ffmpeg")
 class MediaProbeTest {
 
     private static Path videoWithAudio;

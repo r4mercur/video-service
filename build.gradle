@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.gradle.test-retry' version '1.6.4'
 }
 
 group = 'com.bjarne'
@@ -29,6 +30,7 @@ dependencies {
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'software.amazon.awssdk:s3:2.54.2'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
@@ -44,6 +46,43 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// Ohne diese Overrides wartet ein havariertes HikariCP bei jedem einzelnen Test erneut den vollen
+// Default-Timeout (30s) ab, bevor die Verbindung als tot gilt - bei 9-10 Tests pro Klasse macht das
+// aus einem einzelnen Testcontainers-Ausreisser einen 5-Minuten-Haenger. Fuer Tests reicht ein
+// kurzer Timeout locker (lokaler Testcontainer, Verbindung sollte in Millisekunden stehen); ein
+// echter Ausreisser soll die Klasse dann in Sekunden statt Minuten scheitern lassen. Gilt nicht fuer
+// den Produktivbetrieb (dort bleibt der Spring-Default von application.properties unveraendert).
+// Testcontainers-Postgres verliert auf dieser Umgebung gelegentlich kurzzeitig die Verbindung
+// (Docker-Desktop/WSL2-Netzwerk-Symptom, Ursache bewusst nicht behoben - siehe Analyse). Ein Test,
+// der deswegen einmalig fehlschlaegt und beim Retry sauber durchlaeuft, ist kein echter Bug -
+// maxFailures begrenzt das auf einen einzelnen Ausreisser-Batch, damit ein tatsaechlich kaputter
+// Test (der auch bei jedem Retry scheitert) den Build weiterhin zuverlaessig rot macht. 40 statt
+// niedriger, weil die Flakiness beobachtet auch mal 2-3 ganze Klassen auf einmal treffen kann
+// (schon 20 Fehlschlaege in einem einzelnen Lauf gesehen) - bei zu knappem Cap deaktiviert das
+// Plugin den Retry fuer die gesamte Runde genau dann, wenn er am meisten gebraucht wird.
+tasks.withType(Test).configureEach {
+    systemProperty 'spring.datasource.hikari.connection-timeout', '3000'
+    systemProperty 'spring.datasource.hikari.validation-timeout', '3000'
+    retry {
+        maxRetries = 2
+        maxFailures = 40
+        failOnPassedAfterRetry = false
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// Schneller CI-Gate-Task ohne die drei FFmpeg-lastigen Klassen (@Tag("ffmpeg")):
+// FfmpegRunnerTest, MediaProbeTest, TranscodeServiceIntegrationTest. Fuer den vollstaendigen
+// Lauf inkl. FFmpeg-Tests weiterhin `test` verwenden.
+tasks.register('fastTest', Test) {
+    group = 'verification'
+    description = 'Runs the test suite excluding @Tag("ffmpeg") tests (fast CI gate).'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        excludeTags 'ffmpeg'
+    }
 }

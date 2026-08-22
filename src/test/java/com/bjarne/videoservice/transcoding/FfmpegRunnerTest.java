@@ -1,5 +1,6 @@
 package com.bjarne.videoservice.transcoding;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -8,6 +9,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Tag("ffmpeg")
 class FfmpegRunnerTest {
 
     private final FfmpegRunner runner = new FfmpegRunner();

@@ -20,10 +20,13 @@ import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -92,8 +95,41 @@ public class SecurityConfig {
         return NimbusJwtDecoder.withPublicKey(rsaKey.toRSAPublicKey()).build();
     }
 
+    /**
+     * Katalog-GETs sind laut CLAUDE.md Abschnitt 1 oeffentlich ohne Registrierung - auch wenn ein
+     * Client einen abgelaufenen/ungueltigen Access-Token mitschickt (typisch bei 15-min-Tokens ohne
+     * rechtzeitigen Refresh, siehe Abschnitt 8). Ohne diesen Resolver wuerde Spring Securitys
+     * BearerTokenAuthenticationFilter einen ungueltigen Token mit 401 hart abweisen, noch bevor die
+     * permitAll-Regel greift (manuell verifiziert). Fuer diese Pfade wird ein nicht dekodierbarer
+     * Token daher wie "kein Token" behandelt -> Request laeuft anonym weiter. Auf allen anderen
+     * Pfaden bleibt das Standardverhalten (harte 401 bei ungueltigem Token) unveraendert.
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
+    public BearerTokenResolver bearerTokenResolver(JwtDecoder jwtDecoder) {
+        DefaultBearerTokenResolver delegate = new DefaultBearerTokenResolver();
+        RequestMatcher optionalAuthPaths = RequestMatchers.anyOf(
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/categories"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/users/*/videos")
+        );
+        return request -> {
+            String token = delegate.resolve(request);
+            if (token == null || !optionalAuthPaths.matches(request)) {
+                return token;
+            }
+            try {
+                jwtDecoder.decode(token);
+                return token;
+            } catch (JwtException e) {
+                return null;
+            }
+        };
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
+                                                     BearerTokenResolver bearerTokenResolver) throws Exception {
         RequestMatcher csrfProtectedPaths = RequestMatchers.anyOf(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/refresh"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/logout")
@@ -110,12 +146,17 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/categories", "/api/videos", "/api/videos/*",
+                                "/api/users/*/videos").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
-                        .decoder(jwtDecoder)
-                        .jwtAuthenticationConverter(jwtAuthenticationConverter())
-                ))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .bearerTokenResolver(bearerTokenResolver)
+                        .jwt(jwt -> jwt
+                                .decoder(jwtDecoder)
+                                .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                        ))
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class);
         return http.build();
     }
