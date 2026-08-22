@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +26,19 @@ class FfmpegRunnerTest {
     void runThrowsOnNonZeroExitCode() {
         assertThatThrownBy(() -> runner.run(List.of("ffmpeg", "-not-a-real-flag"), Duration.ofSeconds(10)))
                 .isInstanceOf(TranscodeProcessException.class);
+    }
+
+    @Test
+    void runReportsProgressViaOnProgressCallback() {
+        List<Duration> reported = new ArrayList<>();
+
+        runner.run(List.of("ffmpeg", "-y", "-f", "lavfi",
+                        "-i", "testsrc=duration=3:size=320x240:rate=25",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-f", "null", "-"),
+                Duration.ofSeconds(30), reported::add);
+
+        assertThat(reported).isNotEmpty();
+        assertThat(reported.getLast()).isGreaterThan(Duration.ZERO);
     }
 
     @Test

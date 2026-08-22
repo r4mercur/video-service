@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -115,10 +116,11 @@ public class UploadService {
     @Transactional(readOnly = true)
     public VideoStatusResponse status(UUID videoId) {
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
-        String lastError = transcodeJobRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId)
-                .map(TranscodeJob::getLastError)
-                .orElse(null);
-        return new VideoStatusResponse(video.getStatus(), lastError);
+        Optional<TranscodeJob> latestJob = transcodeJobRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId);
+        String lastError = latestJob.map(TranscodeJob::getLastError).orElse(null);
+        int progressPercent = latestJob.map(TranscodeJob::getProgressPercent).orElse(0);
+        String currentStep = latestJob.map(TranscodeJob::getCurrentStep).orElse(null);
+        return new VideoStatusResponse(video.getStatus(), lastError, progressPercent, currentStep);
     }
 
     private String buildUniqueSlug(String title) {

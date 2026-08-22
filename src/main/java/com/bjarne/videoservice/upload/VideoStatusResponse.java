@@ -2,5 +2,5 @@ package com.bjarne.videoservice.upload;
 
 import com.bjarne.videoservice.catalog.VideoStatus;
 
-public record VideoStatusResponse(VideoStatus status, String lastError) {
+public record VideoStatusResponse(VideoStatus status, String lastError, int progressPercent, String currentStep) {
 }

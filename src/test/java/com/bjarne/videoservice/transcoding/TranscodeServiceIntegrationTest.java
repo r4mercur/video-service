@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +32,9 @@ class TranscodeServiceIntegrationTest extends AbstractS3IntegrationTest {
 
     @Autowired
     private TranscodeService transcodeService;
+
+    @Autowired
+    private TranscodeJobRepository transcodeJobRepository;
 
     @Autowired
     private VideoRepository videoRepository;
@@ -94,6 +98,26 @@ class TranscodeServiceIntegrationTest extends AbstractS3IntegrationTest {
         assertObjectExists(video.getStoragePrefix() + "/master.m3u8");
         assertObjectExists(video.getStoragePrefix() + "/360p/playlist.m3u8");
         assertObjectExists(video.getStoragePrefix() + "/720p/playlist.m3u8");
+    }
+
+    @Test
+    void processWithJobIdWritesFullProgressOnSuccess(@TempDir Path tempDir) {
+        Video video = seedVideo();
+        TranscodeJob job = transcodeJobRepository.save(new TranscodeJob(video, Instant.now()));
+        Path clip = tempDir.resolve("progress.mp4");
+        fixtureRunner.run(List.of("ffmpeg", "-y",
+                "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+                "-shortest", "-pix_fmt", "yuv420p",
+                "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac",
+                clip.toString()), Duration.ofSeconds(30));
+        uploadSource(video, clip);
+
+        transcodeService.process(video.getId(), job.getId());
+
+        TranscodeJob reloaded = transcodeJobRepository.findById(job.getId()).orElseThrow();
+        assertThat(reloaded.getProgressPercent()).isEqualTo(100);
+        assertThat(reloaded.getCurrentStep()).isEqualTo("Fertig");
     }
 
     private void uploadSource(Video video, Path clip) {

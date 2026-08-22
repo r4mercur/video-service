@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * Baut aus den geplanten Renditions (siehe {@link RenditionPlanner}) HLS-fMP4-Ausgaben
@@ -29,10 +30,17 @@ public class HlsPackager {
         this.properties = properties;
     }
 
+    /**
+     * @param progressListener meldet je Rendition (Index in {@code plan}) den Fortschritt innerhalb
+     *                          dieser Rendition als Bruchteil 0.0-1.0, abgeleitet aus ffmpegs
+     *                          "-progress"-Ausgabe relativ zur bekannten Quelldauer.
+     */
     public List<PackagedRendition> createRenditions(Path sourceFile, MediaInfo sourceInfo,
-                                                      List<RenditionPlanner.PlannedRendition> plan, Path outputDir) {
+                                                      List<RenditionPlanner.PlannedRendition> plan, Path outputDir,
+                                                      BiConsumer<Integer, Double> progressListener) {
         List<PackagedRendition> result = new ArrayList<>(plan.size());
-        for (RenditionPlanner.PlannedRendition rendition : plan) {
+        for (int renditionIndex = 0; renditionIndex < plan.size(); renditionIndex++) {
+            RenditionPlanner.PlannedRendition rendition = plan.get(renditionIndex);
             Path renditionDir = outputDir.resolve(rendition.height() + "p");
             createDirectory(renditionDir);
 
@@ -82,7 +90,14 @@ public class HlsPackager {
             command.add(renditionDir.resolve("segment_%03d.m4s").toString());
             command.add(renditionDir.resolve("playlist.m3u8").toString());
 
-            ffmpegRunner.run(command, properties.jobTimeout());
+            int index = renditionIndex;
+            if (sourceInfo.durationSeconds() > 0) {
+                ffmpegRunner.run(command, properties.jobTimeout(), outTime -> progressListener.accept(index,
+                        clampFraction(outTime.toMillis() / (sourceInfo.durationSeconds() * 1000))));
+            } else {
+                ffmpegRunner.run(command, properties.jobTimeout());
+            }
+            progressListener.accept(index, 1.0);
 
             int width = rendition.streamCopy() ? sourceInfo.width() : scaledWidth(sourceInfo, rendition.height());
             int bitrateKbps = bitrateForHeight(rendition.height());
@@ -138,6 +153,10 @@ public class HlsPackager {
                 sprite.toString()
         ), properties.jobTimeout());
         return sprite;
+    }
+
+    private double clampFraction(double fraction) {
+        return Math.min(1.0, Math.max(0.0, fraction));
     }
 
     private int scaledWidth(MediaInfo sourceInfo, int targetHeight) {

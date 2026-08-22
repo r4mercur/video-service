@@ -105,7 +105,8 @@ class UploadControllerIntegrationTest extends AbstractS3IntegrationTest {
         mockMvc.perform(get("/api/videos/" + videoId + "/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PROCESSING"));
+                .andExpect(jsonPath("$.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.progressPercent").value(0));
     }
 
     @Test

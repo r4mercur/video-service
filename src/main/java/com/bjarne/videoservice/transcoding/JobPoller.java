@@ -44,7 +44,7 @@ public class JobPoller {
         log.info("Job {} fuer Video {} geclaimt von {}", job.jobId(), job.videoId(), workerId);
 
         try {
-            TranscodeOutcome outcome = transcodeService.process(job.videoId());
+            TranscodeOutcome outcome = transcodeService.process(job.videoId(), job.jobId());
             lifecycle.recordSuccess(job.jobId(), job.videoId(), outcome);
             log.info("Job {} fuer Video {} erfolgreich abgeschlossen", job.jobId(), job.videoId());
         } catch (MediaValidationException e) {

@@ -47,6 +47,12 @@ public class TranscodeJob {
     @Column(name = "last_error")
     private String lastError;
 
+    @Column(name = "progress_percent", nullable = false)
+    private int progressPercent = 0;
+
+    @Column(name = "current_step")
+    private String currentStep;
+
     @Column(name = "scheduled_at", nullable = false)
     private Instant scheduledAt;
 
@@ -116,6 +122,22 @@ public class TranscodeJob {
 
     public void setLastError(String lastError) {
         this.lastError = lastError;
+    }
+
+    public int getProgressPercent() {
+        return progressPercent;
+    }
+
+    public void setProgressPercent(int progressPercent) {
+        this.progressPercent = progressPercent;
+    }
+
+    public String getCurrentStep() {
+        return currentStep;
+    }
+
+    public void setCurrentStep(String currentStep) {
+        this.currentStep = currentStep;
     }
 
     public Instant getScheduledAt() {
