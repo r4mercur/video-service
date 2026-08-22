@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: 'postgres:17'
+    environment:
+      - 'POSTGRES_DB=mydatabase'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5432:5432'
+  minio:
+    image: 'minio/minio:latest'
+    command: 'server /data --console-address ":9002"'
+    environment:
+      - 'MINIO_ROOT_USER=videoservice'
+      - 'MINIO_ROOT_PASSWORD=videoservice-dev'
+      # MinIO unterstuetzt die S3-CORS-API (PutBucketCors) nicht - CORS muss serverseitig gesetzt werden.
+      - 'MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:4200'
+    ports:
+      - '9000:9000'
+      - '9002:9002'
+    volumes:
+      - 'minio-data:/data'
+
+volumes:
+  minio-data:
