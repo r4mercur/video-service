@@ -1,10 +1,11 @@
 package com.bjarne.videoservice.transcoding;
 
 import com.bjarne.videoservice.catalog.Video;
-import com.bjarne.videoservice.catalog.VideoRepository;
 import com.bjarne.videoservice.catalog.VideoRendition;
+import com.bjarne.videoservice.catalog.VideoRepository;
 import com.bjarne.videoservice.catalog.VideoStatus;
 import com.bjarne.videoservice.config.TranscodeProperties;
+import com.bjarne.videoservice.shared.exceptions.ConflictException;
 import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,31 @@ public class TranscodeJobLifecycle {
                 markVideoFailed(job.getVideo().getId());
             }
         }
+    }
+
+    /**
+     * Stoesst einen kompletten Neu-Transcode fuer ein bereits verarbeitetes (oder fehlgeschlagenes)
+     * Video an - z.B. nachdem ein Bug in der Packaging-Logik gefixt wurde und existierende Videos
+     * mit fehlerhaften Artefakten neu erzeugt werden muessen. Alte Rendition-Zeilen werden geloescht,
+     * da die Ladder sich zwischen den Laeufen unterscheiden kann (RenditionPlanner); {@code recordSuccess}
+     * legt sie beim naechsten erfolgreichen Lauf neu an.
+     */
+    @Transactional
+    public void requeueForRetranscode(UUID videoId) {
+        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        if (video.getSourceKey() == null) {
+            throw new ConflictException("Video hat noch keinen abgeschlossenen Upload: " + videoId);
+        }
+        jobRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId)
+                .filter(job -> job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.RUNNING)
+                .ifPresent(job -> {
+                    throw new ConflictException("Es laeuft bereits ein Transcode-Job fuer dieses Video: " + videoId);
+                });
+
+        videoRenditionRepository.deleteByVideoId(videoId);
+        video.setStatus(VideoStatus.PROCESSING);
+        videoRepository.save(video);
+        jobRepository.save(new TranscodeJob(video, clock.instant()));
     }
 
     @Transactional

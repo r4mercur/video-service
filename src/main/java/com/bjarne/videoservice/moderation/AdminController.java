@@ -5,6 +5,7 @@ import com.bjarne.videoservice.catalog.CategoryAdminService;
 import com.bjarne.videoservice.catalog.CreateCategoryRequest;
 import com.bjarne.videoservice.catalog.UpdateCategoryRequest;
 import com.bjarne.videoservice.shared.CursorPage;
+import com.bjarne.videoservice.transcoding.TranscodeJobLifecycle;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,10 +22,13 @@ public class AdminController {
 
     private final AdminService adminService;
     private final CategoryAdminService categoryAdminService;
+    private final TranscodeJobLifecycle transcodeJobLifecycle;
 
-    public AdminController(AdminService adminService, CategoryAdminService categoryAdminService) {
+    public AdminController(AdminService adminService, CategoryAdminService categoryAdminService,
+                            TranscodeJobLifecycle transcodeJobLifecycle) {
         this.adminService = adminService;
         this.categoryAdminService = categoryAdminService;
+        this.transcodeJobLifecycle = transcodeJobLifecycle;
     }
 
     @GetMapping("/api/admin/categories")
@@ -54,6 +58,12 @@ public class AdminController {
                                               JwtAuthenticationToken authentication) {
         adminService.unblockVideo(id, adminUserId(authentication), request.reason());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/admin/videos/{id}/retranscode")
+    public ResponseEntity<Void> retranscodeVideo(@PathVariable UUID id) {
+        transcodeJobLifecycle.requeueForRetranscode(id);
+        return ResponseEntity.accepted().build();
     }
 
     @GetMapping("/api/admin/reports")

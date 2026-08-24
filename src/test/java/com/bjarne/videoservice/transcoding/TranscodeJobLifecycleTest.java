@@ -1,11 +1,6 @@
 package com.bjarne.videoservice.transcoding;
 
-import com.bjarne.videoservice.catalog.Category;
-import com.bjarne.videoservice.catalog.CategoryRepository;
-import com.bjarne.videoservice.catalog.Video;
-import com.bjarne.videoservice.catalog.VideoRepository;
-import com.bjarne.videoservice.catalog.VideoStatus;
-import com.bjarne.videoservice.catalog.Visibility;
+import com.bjarne.videoservice.catalog.*;
 import com.bjarne.videoservice.identity.User;
 import com.bjarne.videoservice.identity.UserRepository;
 import com.bjarne.videoservice.support.AbstractPostgresIntegrationTest;
@@ -15,18 +10,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
 
@@ -224,6 +215,58 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
 
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
         assertThat(videoRepository.findById(video.getId()).orElseThrow().getStatus()).isEqualTo(VideoStatus.FAILED);
+    }
+
+    @Test
+    void requeueForRetranscodeResetsVideoAndInsertsFreshPendingJob() {
+        Video video = seedVideo();
+        TranscodeJob oldJob = jobRepository.save(new TranscodeJob(video, clock.instant()));
+        oldJob.setStatus(JobStatus.DONE);
+        jobRepository.save(oldJob);
+        video.setStatus(VideoStatus.READY);
+        videoRepository.save(video);
+        videoRenditionRepository.save(new com.bjarne.videoservice.catalog.VideoRendition(video, 720, 2500,
+                video.getStoragePrefix() + "/720p/playlist.m3u8", 12345L));
+
+        lifecycle.requeueForRetranscode(video.getId());
+
+        Video reloaded = videoRepository.findById(video.getId()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(VideoStatus.PROCESSING);
+        assertThat(videoRenditionRepository.findByVideoId(video.getId())).isEmpty();
+
+        List<TranscodeJob> jobs = jobRepository.findAll().stream()
+                .filter(j -> j.getVideo().getId().equals(video.getId())).toList();
+        assertThat(jobs).hasSize(2);
+        assertThat(jobs).anySatisfy(j -> assertThat(j.getStatus()).isEqualTo(JobStatus.PENDING));
+
+        // Aufraeumen: sonst sieht claimNextReturnsEmptyWhenNothingPending in dieser gemeinsam
+        // genutzten DB (kein Rollback zwischen Tests, siehe AbstractPostgresIntegrationTest) den
+        // hier bewusst offen gelassenen PENDING-Job.
+        jobRepository.deleteAll(jobs);
+    }
+
+    @Test
+    void requeueForRetranscodeRejectsWhenJobAlreadyPending() {
+        Video video = seedVideo();
+        TranscodeJob pendingJob = jobRepository.save(new TranscodeJob(video, clock.instant()));
+
+        assertThatThrownBy(() -> lifecycle.requeueForRetranscode(video.getId()))
+                .isInstanceOf(com.bjarne.videoservice.shared.exceptions.ConflictException.class);
+
+        // Aufraeumen, siehe Kommentar oben.
+        jobRepository.delete(pendingJob);
+    }
+
+    @Test
+    void requeueForRetranscodeRejectsWhenUploadNeverCompleted() {
+        User user = userRepository.save(new User("no-source-" + UUID.randomUUID() + "@example.com",
+                "no-source-" + UUID.randomUUID(), "irrelevant-hash"));
+        Category category = categoryRepository.findBySlug("gaming").orElseThrow();
+        Video video = new Video(user, category, "No Source", "no-source-" + UUID.randomUUID(), Visibility.PUBLIC);
+        videoRepository.save(video);
+
+        assertThatThrownBy(() -> lifecycle.requeueForRetranscode(video.getId()))
+                .isInstanceOf(com.bjarne.videoservice.shared.exceptions.ConflictException.class);
     }
 
     private Video seedVideo() {

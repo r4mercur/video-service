@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +32,7 @@ public class FfmpegRunner {
      * (ffprobe schreibt sein JSON auf stdout, ffmpeg-Diagnosen laufen ueber stderr).
      */
     public String run(List<String> command, Duration timeout) {
-        return run(command, timeout, null);
+        return run(command, timeout, null, null);
     }
 
     /**
@@ -41,11 +42,35 @@ public class FfmpegRunner {
      * interleaved stderr-Log - deshalb nur fuer ffmpeg-, nicht ffprobe-Kommandos sinnvoll.
      */
     public String run(List<String> command, Duration timeout, Consumer<Duration> onProgress) {
+        return run(command, timeout, null, onProgress);
+    }
+
+    /**
+     * Wie {@link #run(List, Duration)}, fuehrt den Prozess aber im angegebenen Working Directory
+     * aus (siehe {@link #run(List, Duration, Path, Consumer)}).
+     */
+    public String run(List<String> command, Duration timeout, Path workingDirectory) {
+        return run(command, timeout, workingDirectory, null);
+    }
+
+    /**
+     * Wie {@link #run(List, Duration, Consumer)}, fuehrt den Prozess aber im angegebenen
+     * Working Directory aus. Noetig, damit ffmpeg-eigene Ausgabedateien, die es selbst relativ
+     * benennt (z.B. "-hls_fmp4_init_filename init.mp4" - anders als "-hls_segment_filename"
+     * schreibt ffmpeg hier den uebergebenen Namen unveraendert in die Playlist, statt nur den
+     * Basename zu nehmen), im richtigen Verzeichnis landen und nicht als absoluter lokaler Pfad
+     * im ausgelieferten Manifest auftauchen.
+     */
+    public String run(List<String> command, Duration timeout, Path workingDirectory, Consumer<Duration> onProgress) {
         List<String> actualCommand = onProgress != null ? withProgressFlag(command) : command;
         log.debug("Fuehre aus: {}", String.join(" ", actualCommand));
         Process process;
         try {
-            process = new ProcessBuilder(actualCommand).redirectErrorStream(true).start();
+            ProcessBuilder builder = new ProcessBuilder(actualCommand).redirectErrorStream(true);
+            if (workingDirectory != null) {
+                builder.directory(workingDirectory.toFile());
+            }
+            process = builder.start();
         } catch (IOException e) {
             throw new TranscodeProcessException("Prozess konnte nicht gestartet werden: " + actualCommand, e);
         }

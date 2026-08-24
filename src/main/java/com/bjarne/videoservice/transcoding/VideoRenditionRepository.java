@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface VideoRenditionRepository extends JpaRepository<VideoRendition, Long> {
 
     List<VideoRendition> findByVideoId(UUID videoId);
+
+    void deleteByVideoId(UUID videoId);
 }

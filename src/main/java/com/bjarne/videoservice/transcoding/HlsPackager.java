@@ -92,10 +92,10 @@ public class HlsPackager {
 
             int index = renditionIndex;
             if (sourceInfo.durationSeconds() > 0) {
-                ffmpegRunner.run(command, properties.jobTimeout(), outTime -> progressListener.accept(index,
+                ffmpegRunner.run(command, properties.jobTimeout(), renditionDir, outTime -> progressListener.accept(index,
                         clampFraction(outTime.toMillis() / (sourceInfo.durationSeconds() * 1000))));
             } else {
-                ffmpegRunner.run(command, properties.jobTimeout());
+                ffmpegRunner.run(command, properties.jobTimeout(), renditionDir);
             }
             progressListener.accept(index, 1.0);
 

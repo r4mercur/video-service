@@ -41,8 +41,10 @@ public class TestUserSeeder implements ApplicationRunner {
             return;
         }
         try {
-            userRepository.save(new User(EMAIL, USERNAME, passwordEncoder.encode(PASSWORD)));
-            log.info("Test-User angelegt: {} (Passwort siehe TestUserSeeder - nur in Nicht-prod-Profilen aktiv)",
+            User user = new User(EMAIL, USERNAME, passwordEncoder.encode(PASSWORD));
+            user.setRole(Role.ADMIN);
+            userRepository.save(user);
+            log.info("Test-User angelegt: {} (Rolle ADMIN, Passwort siehe TestUserSeeder - nur in Nicht-prod-Profilen aktiv)",
                     EMAIL);
         } catch (DataIntegrityViolationException e) {
             log.debug("Test-User wurde parallel bereits von einem anderen Container angelegt", e);
