@@ -21,8 +21,8 @@ public interface TranscodeJobRepository extends JpaRepository<TranscodeJob, Long
     List<TranscodeJob> findByStatusAndLockedAtBefore(JobStatus status, Instant cutoff);
 
     /**
-     * SKIP LOCKED (Postgres) via Hibernates lock.timeout=-2: mehrere Worker-Instanzen koennen
-     * parallel pollen, ohne sich gegenseitig zu blockieren oder denselben Job zu claimen.
+     * SKIP LOCKED (Postgres) via Hibernate's lock.timeout=-2: multiple worker instances can
+     * poll in parallel without blocking each other or claiming the same job.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))

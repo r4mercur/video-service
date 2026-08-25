@@ -3,8 +3,8 @@ package com.bjarne.videoservice.catalog;
 import java.util.UUID;
 
 /**
- * Einzige Stelle fuer Sichtbarkeitslogik (CLAUDE.md 3.2) - wird von Katalog-Queries
- * und dem Detail-Endpunkt genutzt, damit die Regel nicht dupliziert wird.
+ * The single place for visibility logic (CLAUDE.md 3.2) - used by catalog queries
+ * and the detail endpoint so the rule isn't duplicated.
  */
 public final class VisibilityPolicy {
 

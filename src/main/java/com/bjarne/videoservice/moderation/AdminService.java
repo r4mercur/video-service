@@ -20,10 +20,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Moderationsmassnahmen (AP7): Video-Sperre/-Entsperrung laeuft ausschliesslich ueber
- * {@code video.status} (BLOCKED/READY), niemals ueber {@code visibility} - sonst wuerde das
- * Entsperren die urspruengliche, vom Uploader gewaehlte Sichtbarkeit ueberschreiben. Jede Aktion
- * erzeugt einen unveraenderlichen {@link AuditLog}-Eintrag mit Begruendung (CLAUDE.md 12).
+ * Moderation actions (AP7): blocking/unblocking a video runs exclusively through
+ * {@code video.status} (BLOCKED/READY), never through {@code visibility} - otherwise unblocking
+ * would overwrite the original visibility chosen by the uploader. Every action creates an
+ * immutable {@link AuditLog} entry with a reason (CLAUDE.md 12).
  */
 @Service
 public class AdminService {
@@ -52,7 +52,7 @@ public class AdminService {
     public void blockVideo(UUID videoId, UUID adminUserId, String reason) {
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
         if (video.getStatus() == VideoStatus.BLOCKED) {
-            throw new ConflictException("Video ist bereits gesperrt");
+            throw new ConflictException("Video is already blocked");
         }
         video.setStatus(VideoStatus.BLOCKED);
         videoRepository.save(video);
@@ -63,7 +63,7 @@ public class AdminService {
     public void unblockVideo(UUID videoId, UUID adminUserId, String reason) {
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
         if (video.getStatus() != VideoStatus.BLOCKED) {
-            throw new ConflictException("Video ist nicht gesperrt");
+            throw new ConflictException("Video is not blocked");
         }
         video.setStatus(VideoStatus.READY);
         videoRepository.save(video);
@@ -106,9 +106,9 @@ public class AdminService {
     }
 
     /**
-     * Blockt nur, wenn das Video nicht schon gesperrt ist - beim Upholden eines Reports fuer ein
-     * bereits gesperrtes Video (z.B. durch eine fruehere direkte Sperre) soll kein doppelter
-     * VIDEO_BLOCKED-Audit-Eintrag entstehen, der Report wird trotzdem regulaer aufgeloest.
+     * Only blocks if the video isn't already blocked - when upholding a report for a video
+     * that's already blocked (e.g. from an earlier direct block), no duplicate VIDEO_BLOCKED
+     * audit entry should be created; the report is still resolved normally.
      */
     private void block(Video video, UUID adminUserId, Report report, String reason) {
         if (video.getStatus() == VideoStatus.BLOCKED) {
@@ -123,7 +123,7 @@ public class AdminService {
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new NotFoundException("Report not found"));
         if (report.getStatus() != ReportStatus.OPEN) {
-            throw new ConflictException("Meldung wurde bereits bearbeitet");
+            throw new ConflictException("Report has already been handled");
         }
         return report;
     }

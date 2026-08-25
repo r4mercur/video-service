@@ -8,9 +8,9 @@ import java.util.Base64;
 import java.util.UUID;
 
 /**
- * Opake Keyset-Cursor fuer Cursor-Pagination (CLAUDE.md 3.2: kein OFFSET-Paging).
- * Kodiert Timestamp + Tie-Breaker-ID, unabhaengig davon auf welcher Timestamp-Spalte
- * die jeweilige Query sortiert.
+ * Opaque keyset cursor for cursor pagination (CLAUDE.md 3.2: no OFFSET paging).
+ * Encodes a timestamp + tie-breaker ID, independent of which timestamp column
+ * the respective query sorts on.
  */
 public final class CursorCodec {
 
@@ -33,8 +33,8 @@ public final class CursorCodec {
     }
 
     /**
-     * Fuer Long-PK-Entitaeten (z.B. reports) - gleiches Kodierungsschema wie {@link #encode},
-     * nur mit Long statt UUID als Tie-Breaker.
+     * For Long-PK entities (e.g. reports) - same encoding scheme as {@link #encode},
+     * just with Long instead of UUID as the tie-breaker.
      */
     public static String encodeLong(Instant timestamp, Long id) {
         return encodeRaw(timestamp, id);

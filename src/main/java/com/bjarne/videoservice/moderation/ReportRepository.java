@@ -14,9 +14,9 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     boolean existsByVideoIdAndStatus(UUID videoId, ReportStatus status);
 
     /*
-     * cursorTs/cursorId sind nie null (AdminService uebergibt bei fehlendem Cursor einen
-     * "unendlich in der Zukunft" liegenden Sentinel) - siehe CatalogService fuer die gleiche
-     * Begruendung (Postgres SQLState 42P18 bei bare IS-NULL-Pruefung).
+     * cursorTs/cursorId are never null (AdminService passes an "infinitely far in the future"
+     * sentinel when there's no cursor) - see CatalogService for the same reasoning
+     * (Postgres SQLState 42P18 on a bare IS-NULL check).
      */
     @Query("""
             SELECT r FROM Report r

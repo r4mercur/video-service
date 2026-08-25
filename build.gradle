@@ -48,22 +48,21 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// Ohne diese Overrides wartet ein havariertes HikariCP bei jedem einzelnen Test erneut den vollen
-// Default-Timeout (30s) ab, bevor die Verbindung als tot gilt - bei 9-10 Tests pro Klasse macht das
-// aus einem einzelnen Testcontainers-Ausreisser einen 5-Minuten-Haenger. Fuer Tests reicht ein
-// kurzer Timeout locker (lokaler Testcontainer, Verbindung sollte in Millisekunden stehen); ein
-// echter Ausreisser soll die Klasse dann in Sekunden statt Minuten scheitern lassen. Gilt nicht fuer
-// den Produktivbetrieb (dort bleibt der Spring-Default von application.properties unveraendert).
-// Testcontainers-Postgres verliert auf dieser Umgebung gelegentlich kurzzeitig die Verbindung
-// (Docker-Desktop/WSL2-Netzwerk-Symptom, Ursache bewusst nicht behoben - siehe Analyse). Ein Test,
-// der deswegen einmalig fehlschlaegt und beim Retry sauber durchlaeuft, ist kein echter Bug -
-// maxFailures begrenzt das auf einen einzelnen Ausreisser-Batch, damit ein tatsaechlich kaputter
-// Test (der auch bei jedem Retry scheitert) den Build weiterhin zuverlaessig rot macht. 40 war fuer
-// die Suite bis AP6 (~72 Tests) ausreichend (schon 20 Fehlschlaege in einem einzelnen Lauf gesehen);
-// seit AP7 (85 Tests, mehrere zusaetzliche Testcontainers-lastige Klassen) reichte der Cap bei einem
-// schlechten Batch nicht mehr aus - beobachtet wurden bei einem vollen Lauf ueber alle Retries
-// summiert bis zu ~55 Fehlschlaege, bevor das Plugin den Retry fuer die gesamte Runde abschaltet
-// (genau dann, wenn er am meisten gebraucht wird). 100 statt 40, mit Puffer nach oben.
+// Without these overrides, a stuck HikariCP waits out the full default timeout (30s) again on
+// every single test before treating the connection as dead - with 9-10 tests per class, that
+// turns a single Testcontainers hiccup into a 5-minute hang. A short timeout is plenty for tests
+// (local test container, the connection should come up in milliseconds); a real hiccup should
+// then make the class fail in seconds instead of minutes. Doesn't apply to production (the
+// Spring default from application.properties stays unchanged there). Testcontainers Postgres
+// occasionally loses its connection briefly on this environment (Docker Desktop/WSL2 networking
+// symptom, cause deliberately not fixed - see the analysis). A test that fails once because of
+// that and then passes cleanly on retry isn't a real bug - maxFailures caps that to a single
+// outlier batch, so that a test that's actually broken (and fails on every retry too) still
+// reliably turns the build red. 40 was enough for the suite up to AP6 (~72 tests) (already saw
+// 20 failures in a single run); since AP7 (85 tests, several additional Testcontainers-heavy
+// classes) the cap wasn't enough anymore on a bad batch - a full run summed across all retries
+// was observed hitting up to ~55 failures before the plugin disables retry for the whole round
+// (exactly when it's needed most). 100 instead of 40, with headroom.
 tasks.withType(Test).configureEach {
     systemProperty 'spring.datasource.hikari.connection-timeout', '3000'
     systemProperty 'spring.datasource.hikari.validation-timeout', '3000'
@@ -78,9 +77,9 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-// Schneller CI-Gate-Task ohne die drei FFmpeg-lastigen Klassen (@Tag("ffmpeg")):
-// FfmpegRunnerTest, MediaProbeTest, TranscodeServiceIntegrationTest. Fuer den vollstaendigen
-// Lauf inkl. FFmpeg-Tests weiterhin `test` verwenden.
+// Faster CI gate task without the three FFmpeg-heavy classes (@Tag("ffmpeg")):
+// FfmpegRunnerTest, MediaProbeTest, TranscodeServiceIntegrationTest. For the full run
+// including the FFmpeg tests, keep using `test`.
 tasks.register('fastTest', Test) {
     group = 'verification'
     description = 'Runs the test suite excluding @Tag("ffmpeg") tests (fast CI gate).'

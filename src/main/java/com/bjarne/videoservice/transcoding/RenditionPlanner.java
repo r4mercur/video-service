@@ -8,9 +8,9 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Reine Planungslogik (CLAUDE.md 9.2 CPU-Gegenmassnahmen): keine Renditions oberhalb der
- * Quellaufloesung, Stream-Copy statt Re-Encode wenn die Quelle in der Ziel-Rendition bereits
- * passend codiert ist.
+ * Pure planning logic (CLAUDE.md 9.2 CPU countermeasures): no renditions above the source
+ * resolution, stream copy instead of re-encode when the source is already suitably encoded
+ * for the target rendition.
  */
 @Component
 public class RenditionPlanner {
@@ -31,8 +31,8 @@ public class RenditionPlanner {
                 .toList();
 
         if (heights.isEmpty()) {
-            // Quelle ist kleiner als die kleinste Sprosse: kein Upscale, einzelne Rendition
-            // in Quellaufloesung statt einer erfundenen 360p-Variante.
+            // Source is smaller than the smallest rung: no upscale, single rendition
+            // at the source resolution instead of a made-up 360p variant.
             heights = List.of(sourceInfo.height());
         }
 

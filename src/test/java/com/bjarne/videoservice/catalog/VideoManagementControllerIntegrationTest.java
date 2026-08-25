@@ -71,16 +71,16 @@ class VideoManagementControllerIntegrationTest extends AbstractS3IntegrationTest
     void updateTitleDescriptionAndCategoryAppliesOnlyProvidedFields() throws Exception {
         String accessToken = registerAndLogin();
         Video video = seedVideo(currentUser(), Visibility.PUBLIC);
-        Category musik = categoryRepository.findBySlug("musik").orElseThrow();
+        Category music = categoryRepository.findBySlug("music").orElseThrow();
 
         mockMvc.perform(patch("/api/videos/" + video.getId())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateVideoRequest(
-                                "New Title", null, musik.getId(), null))))
+                                "New Title", null, music.getId(), null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("New Title"))
-                .andExpect(jsonPath("$.categorySlug").value("musik"));
+                .andExpect(jsonPath("$.categorySlug").value("music"));
 
         Video reloaded = videoRepository.findById(video.getId()).orElseThrow();
         assertThat(reloaded.getDescription()).isEqualTo("original description");

@@ -161,12 +161,12 @@ class AuthControllerIntegrationTest extends AbstractPostgresIntegrationTest {
         MvcResult loginResult = login(email, "password123");
         String refreshToken = extractCookieValue(loginResult, "refresh_token");
 
-        // Der exakte Status (401 vs. 403) unterscheidet sich zwischen MockMvc und dem echten
-        // eingebetteten Server: bei anonymen Requests routet ExceptionTranslationFilter CSRF-Fehler
-        // ueber den AuthenticationEntryPoint (401 + WWW-Authenticate) statt den AccessDeniedHandler
-        // (403) - manuell per curl gegen den echten Server verifiziert (401). MockMvc reproduziert
-        // dieses Filterketten-Detail nicht deckungsgleich, daher hier bewusst nur auf "abgelehnt"
-        // (4xx) statt auf einen konkreten Code geprueft.
+        // The exact status (401 vs. 403) differs between MockMvc and the real embedded server:
+        // for anonymous requests, ExceptionTranslationFilter routes CSRF errors through the
+        // AuthenticationEntryPoint (401 + WWW-Authenticate) instead of the AccessDeniedHandler
+        // (403) - manually verified against the real server via curl (401). MockMvc doesn't
+        // reproduce this filter-chain detail identically, so this deliberately only checks for
+        // "rejected" (4xx) instead of a specific code.
         mockMvc.perform(post("/api/auth/refresh").cookie(new Cookie("refresh_token", refreshToken)))
                 .andExpect(status().is4xxClientError());
     }

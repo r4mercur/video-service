@@ -53,9 +53,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Bis AP2 nur Actuator-Platzhalter, jetzt vollstaendiger Resource-Server:
- * selbst signierte RSA-JWTs (Nimbus) plus CSRF-Schutz, der auf die beiden
- * cookie-authentifizierten Pfade (refresh/logout) begrenzt ist.
+ * Just an Actuator placeholder up to AP2, now a full resource server:
+ * self-signed RSA JWTs (Nimbus) plus CSRF protection limited to the two
+ * cookie-authenticated paths (refresh/logout).
  */
 @Configuration
 @EnableWebSecurity
@@ -92,13 +92,13 @@ public class SecurityConfig {
     }
 
     /**
-     * Katalog-GETs sind laut CLAUDE.md Abschnitt 1 oeffentlich ohne Registrierung - auch wenn ein
-     * Client einen abgelaufenen/ungueltigen Access-Token mitschickt (typisch bei 15-min-Tokens ohne
-     * rechtzeitigen Refresh, siehe Abschnitt 8). Ohne diesen Resolver wuerde Spring Securitys
-     * BearerTokenAuthenticationFilter einen ungueltigen Token mit 401 hart abweisen, noch bevor die
-     * permitAll-Regel greift (manuell verifiziert). Fuer diese Pfade wird ein nicht dekodierbarer
-     * Token daher wie "kein Token" behandelt -> Request laeuft anonym weiter. Auf allen anderen
-     * Pfaden bleibt das Standardverhalten (harte 401 bei ungueltigem Token) unveraendert.
+     * Per CLAUDE.md section 1, catalog GETs are public without registration - even when a
+     * client sends an expired/invalid access token (typical for 15-min tokens without a timely
+     * refresh, see section 8). Without this resolver, Spring Security's
+     * BearerTokenAuthenticationFilter would hard-reject an invalid token with 401 before the
+     * permitAll rule even applies (manually verified). For these paths, a non-decodable token
+     * is therefore treated like "no token" -> the request continues anonymously. On all other
+     * paths the default behavior (hard 401 on an invalid token) remains unchanged.
      */
     @Bean
     public BearerTokenResolver bearerTokenResolver(JwtDecoder jwtDecoder) {
@@ -128,10 +128,10 @@ public class SecurityConfig {
     }
 
     /**
-     * Noetig, sobald das Angular-Frontend (localhost:4200) die API auf einem anderen Origin
-     * (localhost:8080) aufruft - ohne diese Bean blockt der Browser die Requests. allowCredentials
-     * ist erforderlich, damit das HttpOnly-Refresh-Cookie (Abschnitt 8) bei /api/auth/refresh und
-     * /api/auth/logout mitgeschickt wird.
+     * Needed as soon as the Angular frontend (localhost:4200) calls the API on a different
+     * origin (localhost:8080) - without this bean the browser blocks the requests.
+     * allowCredentials is required so the HttpOnly refresh cookie (section 8) is sent along
+     * with /api/auth/refresh and /api/auth/logout.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(ApiProperties properties) {
@@ -162,10 +162,10 @@ public class SecurityConfig {
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .requireCsrfProtectionMatcher(csrfProtectedPaths)
                 )
-                // CsrfFilter ruft bei einem fehlgeschlagenen Check den ueber ExceptionHandlingConfigurer
-                // konfigurierten AccessDeniedHandler auf. Scope bewusst auf csrfProtectedPaths begrenzt,
-                // damit andere AccessDenied-Faelle (z.B. @PreAuthorize-Ownership-Checks) unveraendert
-                // beim GlobalExceptionHandler landen.
+                // On a failed check, CsrfFilter calls the AccessDeniedHandler configured via
+                // ExceptionHandlingConfigurer. Scope is deliberately limited to csrfProtectedPaths,
+                // so other AccessDenied cases (e.g. @PreAuthorize ownership checks) still end up
+                // unchanged at the GlobalExceptionHandler.
                 .exceptionHandling(exceptions -> exceptions
                         .defaultAccessDeniedHandlerFor(new CsrfProblemDetailAccessDeniedHandler(jsonMapper),
                                 csrfProtectedPaths))
@@ -192,10 +192,10 @@ public class SecurityConfig {
     }
 
     /**
-     * Der CsrfTokenRequestAttributeHandler laedt das CSRF-Token nur "deferred" -
-     * ohne eine View, die es liest, wuerde der XSRF-TOKEN-Cookie nie an den
-     * Client ausgeliefert. Erzwingt das Laden auf jedem Request (offizielles
-     * Spring-Security-Muster fuer SPA/API-Backends ohne Server-Side-Views).
+     * CsrfTokenRequestAttributeHandler only loads the CSRF token "deferred" -
+     * without a view reading it, the XSRF-TOKEN cookie would never be delivered
+     * to the client. Forces the load on every request (the official Spring
+     * Security pattern for SPA/API backends without server-side views).
      */
     private static final class CsrfCookieFilter extends OncePerRequestFilter {
         @Override
@@ -219,9 +219,9 @@ public class SecurityConfig {
     }
 
     private KeyPair generateEphemeralKeyPair() throws NoSuchAlgorithmException {
-        log.warn("Kein app.auth.jwt-private-key-location/jwt-public-key-location konfiguriert - " +
-                "generiere ein temporaeres RSA-Schluesselpaar im Speicher. NUR fuer lokale Entwicklung " +
-                "geeignet, alle Access-Tokens werden beim naechsten Neustart ungueltig.");
+        log.warn("app.auth.jwt-private-key-location/jwt-public-key-location not configured - " +
+                "generating a temporary in-memory RSA key pair. Suitable ONLY for local development, " +
+                "all access tokens will become invalid on the next restart.");
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         return generator.generateKeyPair();

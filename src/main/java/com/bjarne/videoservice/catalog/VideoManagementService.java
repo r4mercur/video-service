@@ -12,9 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * Schreibende Video-Verwaltung durch den Owner (AP7): Metadaten/Sichtbarkeit aendern und
- * Loeschen inkl. S3-Cleanup. Ownership wird ausschliesslich per @PreAuthorize am Controller
- * geprueft (VideoOwnership-Bean, CLAUDE.md 3.2), hier nicht dupliziert.
+ * Write-side video management by the owner (AP7): changing metadata/visibility and
+ * deleting incl. S3 cleanup. Ownership is checked exclusively via @PreAuthorize on the
+ * controller (VideoOwnership bean, CLAUDE.md 3.2), not duplicated here.
  */
 @Service
 public class VideoManagementService {
@@ -65,7 +65,7 @@ public class VideoManagementService {
     public void delete(UUID videoId) {
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
         if (reportRepository.existsByVideoIdAndStatus(videoId, ReportStatus.OPEN)) {
-            throw new ConflictException("Video kann nicht geloescht werden, solange eine Meldung offen ist");
+            throw new ConflictException("Video cannot be deleted while a report is open");
         }
         if (video.getStoragePrefix() != null) {
             storagePrefixMover.deleteAll(video.getStoragePrefix());

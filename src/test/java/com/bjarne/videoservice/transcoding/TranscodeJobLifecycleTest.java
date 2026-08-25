@@ -180,7 +180,7 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
         job.setMaxAttempts(3);
         jobRepository.save(job);
 
-        lifecycle.recordValidationFailure(job.getId(), video.getId(), "keine Videospur");
+        lifecycle.recordValidationFailure(job.getId(), video.getId(), "no video track");
 
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
         assertThat(videoRepository.findById(video.getId()).orElseThrow().getStatus()).isEqualTo(VideoStatus.FAILED);
@@ -194,7 +194,7 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
         job.setMaxAttempts(3);
         jobRepository.save(job);
 
-        lifecycle.recordTransientFailure(job.getId(), video.getId(), "ffmpeg abgestuerzt");
+        lifecycle.recordTransientFailure(job.getId(), video.getId(), "ffmpeg crashed");
 
         TranscodeJob reloaded = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(JobStatus.PENDING);
@@ -211,7 +211,7 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
         job.setMaxAttempts(3);
         jobRepository.save(job);
 
-        lifecycle.recordTransientFailure(job.getId(), video.getId(), "ffmpeg abgestuerzt");
+        lifecycle.recordTransientFailure(job.getId(), video.getId(), "ffmpeg crashed");
 
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
         assertThat(videoRepository.findById(video.getId()).orElseThrow().getStatus()).isEqualTo(VideoStatus.FAILED);
@@ -239,9 +239,9 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
         assertThat(jobs).hasSize(2);
         assertThat(jobs).anySatisfy(j -> assertThat(j.getStatus()).isEqualTo(JobStatus.PENDING));
 
-        // Aufraeumen: sonst sieht claimNextReturnsEmptyWhenNothingPending in dieser gemeinsam
-        // genutzten DB (kein Rollback zwischen Tests, siehe AbstractPostgresIntegrationTest) den
-        // hier bewusst offen gelassenen PENDING-Job.
+        // Cleanup: otherwise claimNextReturnsEmptyWhenNothingPending would see the PENDING job
+        // deliberately left open here, since this shared DB isn't rolled back between tests
+        // (see AbstractPostgresIntegrationTest).
         jobRepository.deleteAll(jobs);
     }
 
@@ -253,7 +253,7 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
         assertThatThrownBy(() -> lifecycle.requeueForRetranscode(video.getId()))
                 .isInstanceOf(com.bjarne.videoservice.shared.exceptions.ConflictException.class);
 
-        // Aufraeumen, siehe Kommentar oben.
+        // Cleanup, see comment above.
         jobRepository.delete(pendingJob);
     }
 

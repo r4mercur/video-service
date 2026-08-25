@@ -12,10 +12,10 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * View-Zaehlung, dedupliziert (CLAUDE.md 7). IP-basiert statt Cookie-basiert (AP7-Entscheidung):
- * kein zusaetzlicher State fuer eine Plattform, die explizit ohne Login ansehbar ist. Schwaeche:
- * mehrere Zuschauer hinter derselben NAT-IP zaehlen nur einmal pro Fenster - bei ~20 gleichzeitigen
- * Zuschauern insgesamt tolerierbar (CLAUDE.md 1).
+ * View counting, deduplicated (CLAUDE.md 7). IP-based instead of cookie-based (AP7 decision):
+ * no extra state for a platform that's explicitly watchable without login. Weakness: multiple
+ * viewers behind the same NAT IP only count once per window - tolerable overall at ~20
+ * concurrent viewers (CLAUDE.md 1).
  */
 @Service
 public class ViewCountService {

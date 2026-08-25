@@ -11,8 +11,8 @@ import java.util.UUID;
 public interface VideoViewStatsRepository extends JpaRepository<VideoViewStats, VideoViewStatsId> {
 
     /*
-     * Atomarer Upsert statt read-then-write (JpaRepository#save wuerde bei zwei gleichzeitigen
-     * ersten Views desselben Tages auf einen PK-Konflikt laufen) - siehe ViewCountService.
+     * Atomic upsert instead of read-then-write (JpaRepository#save would hit a PK conflict on
+     * two concurrent first views of the same day) - see ViewCountService.
      */
     @Modifying
     @Query(value = """

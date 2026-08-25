@@ -4,10 +4,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Einziger Schreibzugriff, den {@link TranscodeService} selbst ausfuehrt - bewusst getrennt von
- * {@link TranscodeJobLifecycle}, die die massgeblichen Zustandsuebergaenge (PENDING/RUNNING/DONE/
- * FAILED) besitzt. Jeder Aufruf ist eine eigene kurze Transaktion, passend zu den vielen, haeufigen
- * Zwischen-Updates waehrend eines lange laufenden ffmpeg-Jobs.
+ * The only write access that {@link TranscodeService} performs itself - deliberately separated
+ * from {@link TranscodeJobLifecycle}, which owns the authoritative state transitions (PENDING/
+ * RUNNING/DONE/FAILED). Each call is its own short transaction, matching the many, frequent
+ * intermediate updates during a long-running ffmpeg job.
  */
 @Service
 public class TranscodeProgressReporter {

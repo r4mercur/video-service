@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 /**
- * Oeffentlich (mit optionalem JWT) - Sichtbarkeits-/Ownership-Pruefung passiert vollstaendig in
- * {@link PlaylistService}, siehe SecurityConfig fuer die permitAll-Matcher dieser Pfade.
+ * Public (with an optional JWT) - visibility/ownership checks happen entirely in
+ * {@link PlaylistService}, see SecurityConfig for the permitAll matchers for these paths.
  */
 @RestController
 public class PlaybackController {

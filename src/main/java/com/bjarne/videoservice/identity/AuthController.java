@@ -33,7 +33,7 @@ public class AuthController {
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request,
                                                   HttpServletRequest httpRequest) {
         if (!rateLimiter.tryConsumeRegister(httpRequest.getRemoteAddr())) {
-            throw new TooManyRequestsException("Zu viele Registrierungen - bitte spaeter erneut versuchen");
+            throw new TooManyRequestsException("Too many registrations - please try again later");
         }
         UserResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -43,7 +43,7 @@ public class AuthController {
     public ResponseEntity<AccessTokenResponse> login(@Valid @RequestBody LoginRequest request,
                                                        HttpServletRequest httpRequest) {
         if (!rateLimiter.tryConsumeLogin(httpRequest.getRemoteAddr())) {
-            throw new TooManyRequestsException("Zu viele Login-Versuche - bitte spaeter erneut versuchen");
+            throw new TooManyRequestsException("Too many login attempts - please try again later");
         }
         AuthService.LoginResult result = authService.login(request, httpRequest.getHeader(HttpHeaders.USER_AGENT));
         ResponseCookie cookie = refreshCookie(result.refreshToken(), Duration.ofDays(30));

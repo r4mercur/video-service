@@ -10,12 +10,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * Legt einen festen Test-User fuer lokale Entwicklung/Frontend-Tests an, falls er noch nicht
- * existiert. Bewusst nicht ueber Flyway (V2__seed_categories.sql-Muster): Migrationen laufen
- * unveraendert auch im prod-Profil, ein Account mit bekanntem Passwort haette dort nichts
- * verloren (oeffentliche Plattform ohne Login-Pflicht, CLAUDE.md Abschnitt 1/12). @Profile("!prod")
- * stellt sicher, dass dieser Runner in Produktion nie laeuft. Idempotent + fehlertolerant bei
- * gleichzeitigem Start von API- und Worker-Container (beide fuehren diesen Runner aus).
+ * Creates a fixed test user for local development/frontend tests, if it doesn't already
+ * exist. Deliberately not done via Flyway (the V2__seed_categories.sql pattern): migrations
+ * run unchanged in the prod profile too, and an account with a known password has no
+ * business being there (public platform with no login requirement, CLAUDE.md section 1/12).
+ * @Profile("!prod") ensures this runner never runs in production. Idempotent and fault-tolerant
+ * when the API and worker containers start at the same time (both run this runner).
  */
 @Component
 @Profile("!prod")
@@ -44,10 +44,10 @@ public class TestUserSeeder implements ApplicationRunner {
             User user = new User(EMAIL, USERNAME, passwordEncoder.encode(PASSWORD));
             user.setRole(Role.ADMIN);
             userRepository.save(user);
-            log.info("Test-User angelegt: {} (Rolle ADMIN, Passwort siehe TestUserSeeder - nur in Nicht-prod-Profilen aktiv)",
+            log.info("Test user created: {} (role ADMIN, password see TestUserSeeder - only active in non-prod profiles)",
                     EMAIL);
         } catch (DataIntegrityViolationException e) {
-            log.debug("Test-User wurde parallel bereits von einem anderen Container angelegt", e);
+            log.debug("Test user was already created concurrently by another container", e);
         }
     }
 }

@@ -12,14 +12,13 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 
 /**
- * CsrfFilter beantwortet einen fehlgeschlagenen Check selbst und ruft dafuer standardmaessig
- * AccessDeniedHandlerImpl auf, die response.sendError(403) nutzt. Das loest bei Spring Boot
- * einen internen Forward auf /error aus, der - da /error selbst nicht permitAll ist - den
- * SecurityFilterChain ein zweites Mal durchlaeuft und fuer den anonymen Request in eine
- * generische 401-Bearer-Antwort umgewandelt wird (verifiziert: dispatcherType=ERROR,
- * urspruengliche 403 geht verloren, Client sieht "unauthenticated" statt "CSRF ungueltig").
- * Dieser Handler schreibt die Antwort direkt und synchron, ohne sendError()/Error-Dispatch,
- * und haelt sich an den ProblemDetail-Contract aus CLAUDE.md 3.2.
+ * CsrfFilter handles a failed check itself and by default calls AccessDeniedHandlerImpl for it,
+ * which uses response.sendError(403). In Spring Boot this triggers an internal forward to /error,
+ * which - since /error itself isn't permitAll - runs through the SecurityFilterChain a second
+ * time and gets converted into a generic 401 bearer response for the anonymous request (verified:
+ * dispatcherType=ERROR, the original 403 is lost, the client sees "unauthenticated" instead of
+ * "invalid CSRF"). This handler writes the response directly and synchronously, without
+ * sendError()/error dispatch, and follows the ProblemDetail contract from CLAUDE.md 3.2.
  */
 public class CsrfProblemDetailAccessDeniedHandler implements AccessDeniedHandler {
 

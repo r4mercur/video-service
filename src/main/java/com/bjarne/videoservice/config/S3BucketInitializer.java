@@ -9,10 +9,10 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Legt Bucket + CORS lazy beim ersten tatsaechlichen S3-Zugriff an statt eager beim App-Start:
- * ein ApplicationRunner haette jeden Spring-Context (auch Tests ohne S3-Anbindung) an die
- * Storage-Verfuegbarkeit gekoppelt. Von mehreren Stellen genutzt (upload.S3MultipartClient,
- * transcoding.ArtifactStorage) - daher hier zentral statt dupliziert.
+ * Creates the bucket + CORS lazily on the first actual S3 access instead of eagerly at app
+ * startup: an ApplicationRunner would couple every Spring context (including tests without an
+ * S3 connection) to storage availability. Used from multiple places (upload.S3MultipartClient,
+ * transcoding.ArtifactStorage) - hence centralized here instead of duplicated.
  */
 @Component
 public class S3BucketInitializer {
@@ -45,17 +45,17 @@ public class S3BucketInitializer {
     private void ensureBucketExists() {
         try {
             s3Client.createBucket(CreateBucketRequest.builder().bucket(properties.bucket()).build());
-            log.info("Bucket '{}' angelegt", properties.bucket());
+            log.info("Bucket '{}' created", properties.bucket());
         } catch (BucketAlreadyOwnedByYouException | BucketAlreadyExistsException e) {
-            log.debug("Bucket '{}' existiert bereits", properties.bucket());
+            log.debug("Bucket '{}' already exists", properties.bucket());
         }
     }
 
     /**
-     * MinIO implementiert die klassische S3-CORS-API (PutBucketCors) nicht und antwortet mit
-     * HTTP 501 - CORS muss dort stattdessen serverseitig via MINIO_API_CORS_ALLOW_ORIGIN gesetzt
-     * werden (siehe compose.yaml). Auf Backends, die die API unterstuetzen (Garage, echtes AWS S3),
-     * greift dieser Aufruf regulaer. Andere Fehler werden nicht verschluckt.
+     * MinIO does not implement the classic S3 CORS API (PutBucketCors) and responds with
+     * HTTP 501 - CORS must instead be set there server-side via MINIO_API_CORS_ALLOW_ORIGIN
+     * (see compose.yaml). On backends that do support the API (Garage, real AWS S3), this call
+     * applies normally. Other errors are not swallowed.
      */
     private void ensureBucketCors() {
         CORSRule rule = CORSRule.builder()
@@ -72,8 +72,8 @@ public class S3BucketInitializer {
                     .build());
         } catch (S3Exception e) {
             if (e.statusCode() == 501) {
-                log.warn("Storage-Backend unterstuetzt die S3-CORS-API nicht (HTTP 501) - CORS muss "
-                        + "serverseitig konfiguriert werden (bei MinIO z.B. MINIO_API_CORS_ALLOW_ORIGIN)");
+                log.warn("Storage backend does not support the S3 CORS API (HTTP 501) - CORS must "
+                        + "be configured server-side (for MinIO e.g. MINIO_API_CORS_ALLOW_ORIGIN)");
             } else {
                 throw e;
             }
@@ -81,10 +81,10 @@ public class S3BucketInitializer {
     }
 
     /**
-     * Der "public/"-Prefix wird von Caddy anonym per reverse_proxy an das Storage durchgereicht
-     * (AP6, kein Auth-Header) - ohne eine Bucket-Policy fuer genau diesen Prefix antwortet MinIO/
-     * Garage mit 403. "private/" bleibt bewusst ausgenommen, dort werden Objekte ausschliesslich
-     * ueber presignte URLs mit Ablaufzeit ausgeliefert (siehe delivery-Paket, AP6/9.3).
+     * The "public/" prefix is passed through anonymously by Caddy via reverse_proxy to storage
+     * (AP6, no auth header) - without a bucket policy for exactly this prefix, MinIO/Garage
+     * responds with 403. "private/" is deliberately excluded, there objects are only ever
+     * delivered via presigned URLs with an expiry (see the delivery package, AP6/9.3).
      */
     private void ensureBucketPublicReadPolicy() {
         String policy = """

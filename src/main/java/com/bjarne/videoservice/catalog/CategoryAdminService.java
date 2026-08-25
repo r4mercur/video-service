@@ -24,7 +24,7 @@ public class CategoryAdminService {
     @Transactional
     public AdminCategoryDto create(CreateCategoryRequest request) {
         if (categoryRepository.findBySlug(request.slug()).isPresent()) {
-            throw new ConflictException("Slug bereits vergeben: " + request.slug());
+            throw new ConflictException("Slug already in use: " + request.slug());
         }
         Category category = new Category(request.slug(), request.name(), request.sortOrder());
         categoryRepository.save(category);

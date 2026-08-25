@@ -18,9 +18,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Generischer Prozess-Ausfuehrer fuer ffmpeg/ffprobe. FFmpeg laeuft als externer Prozess
- * (CLAUDE.md 3.1), nicht eingebettet - dieser Wrapper kapselt Timeout + destroyForcibly()
- * (CLAUDE.md 9.2: "Harter Timeout pro Job mit destroyForcibly()").
+ * Generic process runner for ffmpeg/ffprobe. FFmpeg runs as an external process
+ * (CLAUDE.md 3.1), not embedded - this wrapper encapsulates timeout + destroyForcibly()
+ * (CLAUDE.md 9.2: "Hard timeout per job with destroyForcibly()").
  */
 @Component
 public class FfmpegRunner {
@@ -28,42 +28,42 @@ public class FfmpegRunner {
     private static final Logger log = LoggerFactory.getLogger(FfmpegRunner.class);
 
     /**
-     * Fuehrt das Kommando aus und liefert die zusammengefuehrte stdout/stderr-Ausgabe zurueck
-     * (ffprobe schreibt sein JSON auf stdout, ffmpeg-Diagnosen laufen ueber stderr).
+     * Runs the command and returns the combined stdout/stderr output
+     * (ffprobe writes its JSON to stdout, ffmpeg diagnostics go via stderr).
      */
     public String run(List<String> command, Duration timeout) {
         return run(command, timeout, null, null);
     }
 
     /**
-     * Wie {@link #run(List, Duration)}, meldet aber zusaetzlich den innerhalb des Laufs bereits
-     * verarbeiteten Zeitpunkt der Quelle (fuer Fortschrittsanzeigen, AP-Erweiterung Status-Endpunkt).
-     * Haengt an ffmpegs eigenem "-progress pipe:1" (structured key=value output), nicht am
-     * interleaved stderr-Log - deshalb nur fuer ffmpeg-, nicht ffprobe-Kommandos sinnvoll.
+     * Like {@link #run(List, Duration)}, but additionally reports the source timestamp already
+     * processed within the run (for progress indicators, AP extension status endpoint).
+     * Hooks into ffmpeg's own "-progress pipe:1" (structured key=value output), not the
+     * interleaved stderr log - therefore only useful for ffmpeg, not ffprobe, commands.
      */
     public String run(List<String> command, Duration timeout, Consumer<Duration> onProgress) {
         return run(command, timeout, null, onProgress);
     }
 
     /**
-     * Wie {@link #run(List, Duration)}, fuehrt den Prozess aber im angegebenen Working Directory
-     * aus (siehe {@link #run(List, Duration, Path, Consumer)}).
+     * Like {@link #run(List, Duration)}, but runs the process in the given working directory
+     * (see {@link #run(List, Duration, Path, Consumer)}).
      */
     public String run(List<String> command, Duration timeout, Path workingDirectory) {
         return run(command, timeout, workingDirectory, null);
     }
 
     /**
-     * Wie {@link #run(List, Duration, Consumer)}, fuehrt den Prozess aber im angegebenen
-     * Working Directory aus. Noetig, damit ffmpeg-eigene Ausgabedateien, die es selbst relativ
-     * benennt (z.B. "-hls_fmp4_init_filename init.mp4" - anders als "-hls_segment_filename"
-     * schreibt ffmpeg hier den uebergebenen Namen unveraendert in die Playlist, statt nur den
-     * Basename zu nehmen), im richtigen Verzeichnis landen und nicht als absoluter lokaler Pfad
-     * im ausgelieferten Manifest auftauchen.
+     * Like {@link #run(List, Duration, Consumer)}, but runs the process in the given
+     * working directory. Needed so that ffmpeg's own output files, which it names relatively
+     * itself (e.g. "-hls_fmp4_init_filename init.mp4" - unlike "-hls_segment_filename",
+     * ffmpeg writes the given name into the playlist unchanged here, instead of just taking
+     * the basename), end up in the right directory and don't show up as an absolute local path
+     * in the delivered manifest.
      */
     public String run(List<String> command, Duration timeout, Path workingDirectory, Consumer<Duration> onProgress) {
         List<String> actualCommand = onProgress != null ? withProgressFlag(command) : command;
-        log.debug("Fuehre aus: {}", String.join(" ", actualCommand));
+        log.debug("Running: {}", String.join(" ", actualCommand));
         Process process;
         try {
             ProcessBuilder builder = new ProcessBuilder(actualCommand).redirectErrorStream(true);
@@ -72,7 +72,7 @@ public class FfmpegRunner {
             }
             process = builder.start();
         } catch (IOException e) {
-            throw new TranscodeProcessException("Prozess konnte nicht gestartet werden: " + actualCommand, e);
+            throw new TranscodeProcessException("Process could not be started: " + actualCommand, e);
         }
 
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
@@ -86,19 +86,19 @@ public class FfmpegRunner {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
-            throw new TranscodeProcessException("Warten auf Prozess unterbrochen: " + command, e);
+            throw new TranscodeProcessException("Interrupted while waiting for process: " + command, e);
         }
 
         if (!finished) {
             process.destroyForcibly();
-            throw new TranscodeProcessException("Prozess-Timeout nach " + timeout + ": " + command);
+            throw new TranscodeProcessException("Process timed out after " + timeout + ": " + command);
         }
 
         joinQuietly(outputReader);
         int exitCode = process.exitValue();
         String output = captured.toString(StandardCharsets.UTF_8);
         if (exitCode != 0) {
-            throw new TranscodeProcessException("Prozess beendet mit Exit-Code " + exitCode + ": " + command
+            throw new TranscodeProcessException("Process exited with code " + exitCode + ": " + command
                     + "\n" + output);
         }
         return output;
@@ -122,9 +122,9 @@ public class FfmpegRunner {
     }
 
     /**
-     * Liest die kombinierte stdout/stderr-Ausgabe zeilenweise (statt in einem Rutsch wie vorher),
-     * damit "-progress pipe:1"-Zeilen (z.B. "out_time=00:01:23.456789") erkannt werden, sobald
-     * ffmpeg sie schreibt - nicht erst nach Prozessende.
+     * Reads the combined stdout/stderr output line by line (instead of all at once like before),
+     * so that "-progress pipe:1" lines (e.g. "out_time=00:01:23.456789") are recognized as soon
+     * as ffmpeg writes them - not only after the process ends.
      */
     private void readOutput(Process process, ByteArrayOutputStream captured, Consumer<Duration> onProgress) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(),
@@ -138,7 +138,7 @@ public class FfmpegRunner {
                 }
             }
         } catch (IOException ignored) {
-            // Stream wird beim destroyForcibly() geschlossen - erwartetes Verhalten im Timeout-Fall
+            // Stream gets closed by destroyForcibly() - expected behavior in the timeout case
         }
     }
 

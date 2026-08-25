@@ -10,9 +10,9 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * ffprobe-Wrapper fuer die harte Validierung aus CLAUDE.md 9.2: Videospur vorhanden,
- * Dauer <= 2h, Auflösung plausibel. probe() und validate() sind bewusst getrennt, damit
- * die Validierungsregeln ohne echten ffprobe-Lauf unit-testbar sind.
+ * ffprobe wrapper for the hard validation from CLAUDE.md 9.2: video track present,
+ * duration <= 2h, resolution plausible. probe() and validate() are deliberately separated so
+ * the validation rules are unit-testable without an actual ffprobe run.
  */
 @Component
 public class MediaProbe {
@@ -39,16 +39,16 @@ public class MediaProbe {
         try {
             output = ffmpegRunner.run(command, properties.jobTimeout());
         } catch (TranscodeProcessException e) {
-            // ffprobe scheitert praktisch immer an der Datei selbst (kaputter Container,
-            // 0-Byte-Datei, exotischer Codec) - ein Retry hilft hier nicht.
-            throw new MediaValidationException("Quelldatei konnte nicht analysiert werden: " + e.getMessage());
+            // ffprobe practically always fails because of the file itself (broken container,
+            // 0-byte file, exotic codec) - a retry doesn't help here.
+            throw new MediaValidationException("Source file could not be analyzed: " + e.getMessage());
         }
 
         JsonNode root;
         try {
             root = objectMapper.readTree(output);
         } catch (JacksonException e) {
-            throw new MediaValidationException("ffprobe-Ausgabe ist kein gueltiges JSON: " + e.getMessage());
+            throw new MediaValidationException("ffprobe output is not valid JSON: " + e.getMessage());
         }
 
         JsonNode videoStream = findStream(root, "video");
@@ -68,19 +68,19 @@ public class MediaProbe {
 
     public void validate(MediaInfo info) {
         if (!info.hasVideoStream()) {
-            throw new MediaValidationException("Keine Videospur gefunden");
+            throw new MediaValidationException("No video track found");
         }
         if (info.durationSeconds() <= 0) {
-            throw new MediaValidationException("Ungueltige oder fehlende Dauer");
+            throw new MediaValidationException("Invalid or missing duration");
         }
         if (info.durationSeconds() > MAX_DURATION_SECONDS) {
-            throw new MediaValidationException("Dauer ueberschreitet das Maximum von 2 Stunden");
+            throw new MediaValidationException("Duration exceeds the 2-hour maximum");
         }
         if (info.width() < MIN_DIMENSION || info.height() < MIN_DIMENSION) {
-            throw new MediaValidationException("Aufloesung zu klein oder nicht ermittelbar");
+            throw new MediaValidationException("Resolution too small or not determinable");
         }
         if (info.width() > MAX_WIDTH || info.height() > MAX_HEIGHT) {
-            throw new MediaValidationException("Aufloesung unplausibel gross");
+            throw new MediaValidationException("Resolution implausibly large");
         }
     }
 

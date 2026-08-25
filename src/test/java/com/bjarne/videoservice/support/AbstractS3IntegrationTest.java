@@ -1,14 +1,14 @@
 package com.bjarne.videoservice.support;
 
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * Bewusst kein @ServiceConnection - Spring Boot 4 bietet keine eingebaute Service-Connection
- * fuer einen rohen S3Client-Bean, daher explizite @DynamicPropertySource-Verdrahtung.
+ * Deliberately no @ServiceConnection - Spring Boot 4 has no built-in service connection
+ * for a raw S3Client bean, hence explicit @DynamicPropertySource wiring.
  */
 @Testcontainers
 public abstract class AbstractS3IntegrationTest extends AbstractPostgresIntegrationTest {

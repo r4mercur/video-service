@@ -6,9 +6,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Kein playlistKey/playlistUrl hier - die Wiedergabe-URL kommt bewusst ausschliesslich ueber
- * {@code GET /api/videos/{id}/manifest} (delivery-Paket, AP6), das fuer PRIVATE-Videos zur
- * Laufzeit signiert werden muss und daher nicht als statisches Detail-Feld passt.
+ * No playlistKey/playlistUrl here - the playback URL deliberately comes exclusively via
+ * {@code GET /api/videos/{id}/manifest} (delivery package, AP6), which must be signed at
+ * runtime for PRIVATE videos and therefore doesn't fit as a static detail field.
  */
 public record VideoDetailDto(UUID id, String slug, String title, String description, String thumbnailUrl,
                               Integer durationSeconds, Integer width, Integer height, String categorySlug,

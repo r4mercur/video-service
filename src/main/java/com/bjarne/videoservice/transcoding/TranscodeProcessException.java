@@ -1,8 +1,8 @@
 package com.bjarne.videoservice.transcoding;
 
 /**
- * Prozess-/Infrastrukturfehler (Timeout, Exit-Code != 0, IO-Fehler). Retryable ueber
- * attempts/max_attempts mit Backoff - im Gegensatz zu {@link MediaValidationException}.
+ * Process/infrastructure error (timeout, exit code != 0, IO error). Retryable via
+ * attempts/max_attempts with backoff - unlike {@link MediaValidationException}.
  */
 public class TranscodeProcessException extends RuntimeException {
 

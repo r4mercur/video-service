@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * Zentrale Ownership-Pruefung fuer @PreAuthorize auf Video-Schreibendpunkten (CLAUDE.md 3.2).
- * Unbekannte Video-ID -> NotFoundException (404), bekannte ID mit fremdem Owner -> false (403).
+ * Central ownership check for @PreAuthorize on video write endpoints (CLAUDE.md 3.2).
+ * Unknown video ID -> NotFoundException (404), known ID with a different owner -> false (403).
  */
 @Component("videoOwnership")
 public class VideoOwnership {

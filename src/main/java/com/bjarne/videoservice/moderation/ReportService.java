@@ -32,7 +32,7 @@ public class ReportService {
     @Transactional
     public ReportResponse submit(UUID videoId, UUID reporterUserId, SubmitReportRequest request) {
         if (!rateLimiter.tryConsumeReport(reporterUserId.toString())) {
-            throw new TooManyRequestsException("Zu viele Meldungen - bitte spaeter erneut versuchen");
+            throw new TooManyRequestsException("Too many reports - please try again later");
         }
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
         if (!VisibilityPolicy.isVisibleTo(video, reporterUserId)) {

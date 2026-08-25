@@ -12,13 +12,13 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
 /**
- * Cached die rohen Playlist-Bytes (master.m3u8 / Rendition-playlist.m3u8) pro Storage-Key, um bei
- * mehreren Zuschauern desselben Videos nicht bei jedem Request erneut zum Storage zu muessen.
- * Bewusst NUR die rohen Bytes - presignte Segment-URLs (siehe SegmentPresigner) werden bei jedem
- * Request frisch erzeugt, da das Presignen eine reine lokale HMAC-Berechnung ohne Netzwerk-Call
- * ist und ein Cache dort keinen Vorteil brächte, aber staerkeres TTL-Handling noetig machen wuerde.
- * In-Process-Cache (kein Redis) ist ausreichend, solange die API-Rolle nicht horizontal skaliert
- * wird (siehe CLAUDE.md 3.1/11).
+ * Caches the raw playlist bytes (master.m3u8 / rendition playlist.m3u8) per storage key, so that
+ * with multiple viewers of the same video we don't have to hit storage again on every request.
+ * Deliberately ONLY the raw bytes - presigned segment URLs (see SegmentPresigner) are freshly
+ * generated on every request, since presigning is a pure local HMAC computation without a
+ * network call, so a cache there would bring no benefit but would require stricter TTL handling.
+ * An in-process cache (no Redis) is sufficient as long as the API role isn't scaled horizontally
+ * (see CLAUDE.md 3.1/11).
  */
 @Component
 public class PlaylistObjectStore {

@@ -17,10 +17,10 @@ public abstract class AbstractPostgresIntegrationTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17");
 
     /*
-     * Der Spring-Context (inkl. RateLimiter-Singleton) wird ueber viele Testklassen hinweg
-     * gecacht/geteilt - mit den scharfen Produktions-Limits wuerde registerAndLogin() aus
-     * unrelated Tests irgendwann in ein spurious 429 laufen. app.rate-limit.report bleibt
-     * bewusst unveraendert (ReportControllerIntegrationTest prueft genau dessen Default).
+     * The Spring context (incl. the RateLimiter singleton) is cached/shared across many test
+     * classes - with the strict production limits, registerAndLogin() from unrelated tests
+     * would eventually hit a spurious 429. app.rate-limit.report is deliberately left
+     * unchanged (ReportControllerIntegrationTest tests exactly its default).
      */
     @DynamicPropertySource
     static void rateLimitProperties(DynamicPropertyRegistry registry) {

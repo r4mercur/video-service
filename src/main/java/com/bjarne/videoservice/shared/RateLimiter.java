@@ -9,10 +9,10 @@ import io.github.bucket4j.Refill;
 import org.springframework.stereotype.Component;
 
 /**
- * In-process Rate-Limiting (bucket4j + Caffeine) - kein Redis, analog zur PlaylistObjectStore-
- * Entscheidung in AP6: bei einer einzelnen API-Instanz kein Vorteil durch einen shared Cache,
- * nur zusaetzliche Infra. Ein Bucket pro Schluessel (IP bei Login/Register, User-ID bei Reports),
- * Caffeine raeumt inaktive Buckets nach dem Doppelten der Refill-Periode selbst auf.
+ * In-process rate limiting (bucket4j + Caffeine) - no Redis, analogous to the PlaylistObjectStore
+ * decision in AP6: with a single API instance a shared cache brings no benefit, just extra
+ * infra. One bucket per key (IP for login/register, user ID for reports); Caffeine evicts
+ * inactive buckets itself after twice the refill period.
  */
 @Component
 public class RateLimiter {

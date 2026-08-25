@@ -10,10 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Bewegt bzw. loescht alle Objekte eines Videos im Storage (CLAUDE.md 9.3: Sichtbarkeitswechsel
- * verschiebt zwischen public/private-Prefixes; DELETE raeumt komplett auf). S3 kennt kein "move",
- * daher Copy je Objekt und erst danach Batch-Delete der alten Keys - schlaegt ein Copy fehl,
- * bleiben die alten Objekte unangetastet, es geht nichts verloren.
+ * Moves or deletes all objects of a video in storage (CLAUDE.md 9.3: a visibility change moves
+ * objects between the public/private prefixes; DELETE cleans up completely). S3 has no "move",
+ * so this copies each object and only then batch-deletes the old keys - if a copy fails, the old
+ * objects stay untouched and nothing is lost.
  */
 @Component
 public class StoragePrefixMover {

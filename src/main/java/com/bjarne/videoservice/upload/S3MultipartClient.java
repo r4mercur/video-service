@@ -4,26 +4,19 @@ import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
-import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
-import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
-import software.amazon.awssdk.services.s3.model.CompletedPart;
-import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
-import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
-import software.amazon.awssdk.services.s3.model.NoSuchUploadException;
+import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedUploadPartRequest;
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
-import software.amazon.awssdk.services.s3.model.UploadPartRequest;
 
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
 
 /**
- * Duenner Wrapper um S3Client/S3Presigner fuer den Multipart-Upload-Flow.
- * Kein Video-Byte laeuft durch Spring MVC (CLAUDE.md 3.2) - der Browser laedt Parts direkt hier hoch.
- * Bucket/CORS-Bootstrap siehe {@link S3BucketInitializer}.
+ * Thin wrapper around S3Client/S3Presigner for the multipart upload flow.
+ * No video byte runs through Spring MVC (CLAUDE.md 3.2) - the browser uploads parts directly here.
+ * See {@link S3BucketInitializer} for bucket/CORS bootstrap.
  */
 @Component
 public class S3MultipartClient {
@@ -86,7 +79,7 @@ public class S3MultipartClient {
                     .uploadId(uploadId)
                     .build());
         } catch (NoSuchUploadException e) {
-            // bereits abgebrochen/abgeschlossen - Ziel bereits erreicht
+            // already aborted/completed - goal already reached
         }
     }
 

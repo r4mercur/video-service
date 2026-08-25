@@ -4,10 +4,10 @@ import com.bjarne.videoservice.catalog.Visibility;
 import org.springframework.stereotype.Component;
 
 /**
- * Loest einen rohen Storage-Key (Thumbnail, Sprite-Sheet) in eine fuer den Client tatsaechlich
- * abrufbare URL auf - genau eine Stelle (CLAUDE.md 3.2), genutzt von {@link com.bjarne.videoservice.catalog.CatalogService}.
- * PUBLIC-Keys beginnen bereits mit "public/..." (siehe UploadService) und werden ueber den
- * Caddy-Passthrough ausgeliefert, PRIVATE-Keys brauchen eine presignte URL (CLAUDE.md 9.3).
+ * Resolves a raw storage key (thumbnail, sprite sheet) into a URL the client can actually
+ * fetch - exactly one place (CLAUDE.md 3.2), used by {@link com.bjarne.videoservice.catalog.CatalogService}.
+ * PUBLIC keys already start with "public/..." (see UploadService) and are delivered via the
+ * Caddy passthrough, PRIVATE keys need a presigned URL (CLAUDE.md 9.3).
  */
 @Component
 public class MediaUrlResolver {

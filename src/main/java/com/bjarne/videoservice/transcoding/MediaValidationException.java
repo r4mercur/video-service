@@ -1,8 +1,8 @@
 package com.bjarne.videoservice.transcoding;
 
 /**
- * Quelle ist inhaltlich ungeeignet (keine Videospur, zu lang, unplausible Aufloesung, kaputter
- * Container). Nicht retryable - ein erneuter Versuch aendert nichts an der Datei selbst.
+ * Source is unsuitable in content (no video track, too long, implausible resolution, broken
+ * container). Not retryable - a retry doesn't change anything about the file itself.
  */
 public class MediaValidationException extends RuntimeException {
 

@@ -19,10 +19,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Alle DB-Zustandsuebergaenge fuer Transcode-Jobs, jeweils in einer eigenen kurzen Transaktion -
- * bewusst getrennt von {@link TranscodeService} (der die eigentliche, lange laufende Arbeit
- * ausserhalb jeder Transaktion erledigt) und von {@link JobPoller} (reiner Scheduler/Orchestrator,
- * damit @Transactional hier nicht durch Selbstaufruf umgangen wird).
+ * All DB state transitions for transcode jobs, each in its own short transaction - deliberately
+ * separated from {@link TranscodeService} (which does the actual, long-running work outside any
+ * transaction) and from {@link JobPoller} (a pure scheduler/orchestrator, so that @Transactional
+ * here isn't bypassed by a self-invocation).
  */
 @Service
 public class TranscodeJobLifecycle {
@@ -49,7 +49,7 @@ public class TranscodeJobLifecycle {
         List<TranscodeJob> stale = jobRepository.findByStatusAndLockedAtBefore(JobStatus.RUNNING, cutoff);
         for (TranscodeJob job : stale) {
             boolean exhausted = requeueOrFail(job,
-                    "Worker-Timeout: Job war laenger als " + properties.staleJobTimeout() + " gesperrt");
+                    "Worker timeout: job was locked for longer than " + properties.staleJobTimeout());
             if (exhausted) {
                 markVideoFailed(job.getVideo().getId());
             }
@@ -57,22 +57,21 @@ public class TranscodeJobLifecycle {
     }
 
     /**
-     * Stoesst einen kompletten Neu-Transcode fuer ein bereits verarbeitetes (oder fehlgeschlagenes)
-     * Video an - z.B. nachdem ein Bug in der Packaging-Logik gefixt wurde und existierende Videos
-     * mit fehlerhaften Artefakten neu erzeugt werden muessen. Alte Rendition-Zeilen werden geloescht,
-     * da die Ladder sich zwischen den Laeufen unterscheiden kann (RenditionPlanner); {@code recordSuccess}
-     * legt sie beim naechsten erfolgreichen Lauf neu an.
+     * Triggers a complete re-transcode for a video that has already been processed (or failed) -
+     * e.g. after a bug in the packaging logic was fixed and existing videos with broken artifacts
+     * need to be regenerated. Old rendition rows are deleted, since the ladder can differ between
+     * runs (RenditionPlanner); {@code recordSuccess} recreates them on the next successful run.
      */
     @Transactional
     public void requeueForRetranscode(UUID videoId) {
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
         if (video.getSourceKey() == null) {
-            throw new ConflictException("Video hat noch keinen abgeschlossenen Upload: " + videoId);
+            throw new ConflictException("Video does not have a completed upload yet: " + videoId);
         }
         jobRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId)
                 .filter(job -> job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.RUNNING)
                 .ifPresent(job -> {
-                    throw new ConflictException("Es laeuft bereits ein Transcode-Job fuer dieses Video: " + videoId);
+                    throw new ConflictException("A transcode job is already running for this video: " + videoId);
                 });
 
         videoRenditionRepository.deleteByVideoId(videoId);
@@ -146,7 +145,7 @@ public class TranscodeJobLifecycle {
     }
 
     /**
-     * @return true, wenn die Retries ausgeschoepft sind und der Job endgueltig FAILED ist.
+     * @return true if retries are exhausted and the job is now permanently FAILED.
      */
     private boolean requeueOrFail(TranscodeJob job, String error) {
         job.setLastError(error);

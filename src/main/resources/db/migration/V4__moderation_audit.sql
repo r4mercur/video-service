@@ -1,8 +1,8 @@
 -- =========================================================================
--- audit_log (AP7) - Begruendungspflicht bei Moderationsmassnahmen (CLAUDE.md 12).
--- video_id/report_id bewusst ON DELETE SET NULL statt CASCADE: der Audit-Eintrag
--- muss auch dann erhalten bleiben, wenn das Video oder der zugehoerige Report
--- spaeter geloescht wird (Loeschen ist ohnehin nur ohne offene Meldung moeglich).
+-- audit_log (AP7) - justification requirement for moderation actions (CLAUDE.md 12).
+-- video_id/report_id deliberately ON DELETE SET NULL instead of CASCADE: the audit entry
+-- must be preserved even when the video or its associated report is deleted later
+-- (deletion is only possible without an open report anyway).
 -- =========================================================================
 CREATE TABLE audit_log
 (
@@ -20,5 +20,5 @@ CREATE TABLE audit_log
 CREATE INDEX idx_audit_log_video_id ON audit_log (video_id);
 CREATE INDEX idx_audit_log_created_at ON audit_log (created_at DESC);
 
--- Cursor-Pagination fuer die Admin-Report-Liste (CLAUDE.md 3.2: kein OFFSET-Paging).
+-- Cursor pagination for the admin report list (CLAUDE.md 3.2: no OFFSET paging).
 CREATE INDEX idx_reports_status_created_at ON reports (status, created_at DESC);

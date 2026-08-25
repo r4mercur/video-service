@@ -50,7 +50,7 @@ class CatalogControllerIntegrationTest extends AbstractPostgresIntegrationTest {
         mockMvc.perform(get("/api/categories"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].slug").value("gaming"))
-                .andExpect(jsonPath("$[1].slug").value("musik"));
+                .andExpect(jsonPath("$[1].slug").value("music"));
     }
 
     @Test
@@ -74,9 +74,9 @@ class CatalogControllerIntegrationTest extends AbstractPostgresIntegrationTest {
         User owner = registerUser();
         Instant now = Instant.now();
         Category gaming = categoryRepository.findBySlug("gaming").orElseThrow();
-        Category musik = categoryRepository.findBySlug("musik").orElseThrow();
+        Category music = categoryRepository.findBySlug("music").orElseThrow();
         Video gamingVideo = video(owner, gaming, "Gaming Video", VideoStatus.READY, Visibility.PUBLIC, now);
-        video(owner, musik, "Music Video", VideoStatus.READY, Visibility.PUBLIC, now);
+        video(owner, music, "Music Video", VideoStatus.READY, Visibility.PUBLIC, now);
 
         mockMvc.perform(get("/api/videos").param("category", "gaming"))
                 .andExpect(status().isOk())

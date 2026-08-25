@@ -94,7 +94,7 @@ class ReportControllerIntegrationTest extends AbstractPostgresIntegrationTest {
         Video video = seedReadyVideo(saveUser(), Visibility.PUBLIC);
         String accessToken = registerAndLogin();
 
-        // Default-Limit: 10/Stunde (app.rate-limit.report) - der 11. Request muss 429 liefern.
+        // Default limit: 10/hour (app.rate-limit.report) - the 11th request must return 429.
         for (int i = 0; i < 10; i++) {
             mockMvc.perform(post("/api/videos/" + video.getId() + "/report")
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)

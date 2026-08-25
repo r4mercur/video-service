@@ -17,9 +17,9 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
     Optional<Video> findBySlug(String slug);
 
     /*
-     * cursorTs/cursorId sind nie null (CatalogService uebergibt bei fehlendem Cursor einen
-     * "unendlich in der Zukunft" liegenden Sentinel) - eine ":cursorTs IS NULL OR ..."-Verzweigung
-     * wuerde Postgres daran hindern, den Parametertyp fuer die reine IS-NULL-Pruefung aufzuloesen
+     * cursorTs/cursorId are never null (CatalogService passes an "infinitely far in the future"
+     * sentinel when there's no cursor) - a ":cursorTs IS NULL OR ..." branch would prevent
+     * Postgres from resolving the parameter type for the plain IS-NULL check
      * (SQLState 42P18, "could not determine data type of parameter").
      */
     @Query("""

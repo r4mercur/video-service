@@ -14,9 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Laedt die lokal erzeugten Transcoding-Artefakte (Renditions, Master-Playlist, Thumbnail,
- * Sprite-Sheet) nach S3 hoch. Bewusst unabhaengig vom upload-Paket (kein Multipart noetig,
- * die Dateien sind klein) - vermeidet eine Kopplung transcoding -> upload.
+ * Uploads the locally generated transcoding artifacts (renditions, master playlist, thumbnail,
+ * sprite sheet) to S3. Deliberately independent of the upload package (no multipart needed,
+ * the files are small) - avoids coupling transcoding -> upload.
  */
 @Component
 public class ArtifactStorage {

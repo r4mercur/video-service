@@ -8,8 +8,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 /**
- * Unveraenderlicher Nachweis jeder Moderationsmassnahme (CLAUDE.md 12, DSA-Begruendungspflicht) -
- * bewusst ohne Setter, ein Audit-Eintrag wird nie nachtraeglich bearbeitet.
+ * Immutable record of every moderation action (CLAUDE.md 12, DSA justification requirement) -
+ * deliberately without setters, an audit entry is never edited after the fact.
  */
 @Entity
 @Table(name = "audit_log")

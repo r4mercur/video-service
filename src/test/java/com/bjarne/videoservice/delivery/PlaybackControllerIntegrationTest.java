@@ -174,8 +174,8 @@ class PlaybackControllerIntegrationTest extends AbstractS3IntegrationTest {
                 .andReturn();
         String rewritten = result.getResponse().getContentAsString();
 
-        // Keine rohe relative Referenz mehr - jede Segment-/Init-Zeile ist jetzt eine absolute,
-        // presignte Storage-URL (CLAUDE.md 9.3).
+        // No raw relative reference left - every segment/init line is now an absolute,
+        // presigned storage URL (CLAUDE.md 9.3).
         assertThat(rewritten).doesNotContain("\nsegment_000.m4s\n");
         assertThat(rewritten).doesNotContain("URI=\"init.mp4\"");
         assertThat(rewritten).contains("X-Amz-Signature");
@@ -210,7 +210,7 @@ class PlaybackControllerIntegrationTest extends AbstractS3IntegrationTest {
     private String extractUrl(String playlist, String markerRegex) {
         Pattern pattern = Pattern.compile("https?://\\S*" + markerRegex);
         Matcher matcher = pattern.matcher(playlist);
-        assertThat(matcher.find()).as("presignte URL fuer " + markerRegex + " im Playlist-Text gefunden").isTrue();
+        assertThat(matcher.find()).as("presigned URL for " + markerRegex + " found in playlist text").isTrue();
         return matcher.group();
     }
 

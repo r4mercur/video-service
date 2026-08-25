@@ -16,15 +16,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Orchestriert die eigentliche Verarbeitung eines Jobs (Download, ffprobe, Encoding, Upload) -
- * bewusst ohne @Transactional: die Arbeit kann je nach Videolaenge lange dauern, eine offene
- * DB-Transaktion/Connection waere hier falsch. Die massgeblichen Zustandsuebergaenge (PENDING/
- * RUNNING/DONE/FAILED) macht ausschliesslich {@link TranscodeJobLifecycle}, aufgerufen vom
- * {@link JobPoller} nach process(). Einzige Ausnahme: die haeufigen, unkritischen Fortschritts-
- * Updates waehrend des Laufs schreibt process() selbst ueber {@link TranscodeProgressReporter}
- * (Status-Endpunkt-Erweiterung um progressPercent/currentStep) - bewusst kein Aufruf von
- * TranscodeJobLifecycle dafuer, um dessen Zustaendigkeit auf die Zustandsuebergaenge begrenzt zu
- * halten.
+ * Orchestrates the actual processing of a job (download, ffprobe, encoding, upload) -
+ * deliberately without @Transactional: depending on video length the work can take a long time,
+ * and an open DB transaction/connection would be wrong here. The authoritative state transitions
+ * (PENDING/RUNNING/DONE/FAILED) are made exclusively by {@link TranscodeJobLifecycle}, called by
+ * {@link JobPoller} after process(). The only exception: the frequent, non-critical progress
+ * updates during the run are written by process() itself via {@link TranscodeProgressReporter}
+ * (status endpoint extension for progressPercent/currentStep) - deliberately not calling
+ * TranscodeJobLifecycle for this, to keep its responsibility limited to the state transitions.
  */
 @Service
 public class TranscodeService {
@@ -32,10 +31,10 @@ public class TranscodeService {
     private static final Logger log = LoggerFactory.getLogger(TranscodeService.class);
 
     /**
-     * Fortschritts-Budget in Prozentpunkten je Pipeline-Stufe. Die Renditions bekommen den
-     * grossen Rest, gewichtet nach Pixelzahl (grobe, aber ausreichende Naeherung fuer die
-     * x264-Encodingkosten bei fixem Preset/CRF - CLAUDE.md 9.2); Stream-Copy-Renditions bekommen
-     * ein kleines festes Gewicht, da Remuxen kaum Zeit kostet.
+     * Progress budget in percentage points per pipeline stage. The renditions get the large
+     * remainder, weighted by pixel count (a rough but sufficient approximation for x264 encoding
+     * cost at a fixed preset/CRF - CLAUDE.md 9.2); stream-copy renditions get a small fixed
+     * weight, since remuxing barely costs any time.
      */
     private static final int PROBE_PERCENT = 3;
     private static final int THUMBNAIL_PERCENT = 3;
@@ -73,7 +72,7 @@ public class TranscodeService {
                 .orElseThrow(() -> new NotFoundException("Video not found: " + videoId));
         String sourceKey = video.getSourceKey();
         if (sourceKey == null) {
-            throw new MediaValidationException("Video hat keinen source_key: " + videoId);
+            throw new MediaValidationException("Video has no source_key: " + videoId);
         }
         String storagePrefix = video.getStoragePrefix();
 
@@ -85,7 +84,7 @@ public class TranscodeService {
 
             MediaInfo info = mediaProbe.probe(sourceFile);
             mediaProbe.validate(info);
-            reportProgress(jobId, PROBE_PERCENT, "Analysiere Quelldatei");
+            reportProgress(jobId, PROBE_PERCENT, "Analyzing source file");
 
             List<RenditionPlanner.PlannedRendition> plan = renditionPlanner.plan(info);
             Path outputDir = jobDir.resolve("output");
@@ -101,24 +100,24 @@ public class TranscodeService {
             Path thumbnail = hlsPackager.createThumbnail(sourceFile, info, outputDir);
 
             reportProgress(jobId, PROBE_PERCENT + RENDITIONS_PERCENT + THUMBNAIL_PERCENT + SPRITE_PERCENT,
-                    "Sprite-Sheet");
+                    "Sprite sheet");
             Path sprite = hlsPackager.createSpriteSheet(sourceFile, info, outputDir);
 
-            reportProgress(jobId, 100 - UPLOAD_PERCENT, "Hochladen");
+            reportProgress(jobId, 100 - UPLOAD_PERCENT, "Uploading");
             artifactStorage.uploadDirectory(outputDir, storagePrefix);
-            reportProgress(jobId, 100, "Fertig");
+            reportProgress(jobId, 100, "Done");
 
             return new TranscodeOutcome(info, renditions, thumbnail != null, sprite != null);
         } catch (IOException e) {
-            throw new TranscodeProcessException("IO-Fehler beim Verarbeiten von Video " + videoId, e);
+            throw new TranscodeProcessException("IO error while processing video " + videoId, e);
         } finally {
             deleteRecursively(jobDir);
         }
     }
 
     /**
-     * Uebersetzt den Fortschritt innerhalb einer einzelnen Rendition (0.0-1.0) in den
-     * Gesamtfortschritt des Jobs, nach Pixelzahl gewichtet ueber alle geplanten Renditions.
+     * Translates the progress within a single rendition (0.0-1.0) into the overall job
+     * progress, weighted by pixel count across all planned renditions.
      */
     private int renditionOverallPercent(List<RenditionPlanner.PlannedRendition> plan, int renditionIndex,
                                          double fractionWithinRendition) {
@@ -154,11 +153,11 @@ public class TranscodeService {
                 try {
                     Files.delete(path);
                 } catch (IOException e) {
-                    log.warn("Konnte Temp-Datei nicht loeschen: {}", path, e);
+                    log.warn("Could not delete temp file: {}", path, e);
                 }
             });
         } catch (IOException e) {
-            log.warn("Konnte Temp-Verzeichnis nicht aufraeumen: {}", directory, e);
+            log.warn("Could not clean up temp directory: {}", directory, e);
         }
     }
 }

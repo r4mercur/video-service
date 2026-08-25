@@ -1,88 +1,88 @@
 # CLAUDE.md — video-service
 
-Projektkontext und Arbeitsregeln für dieses Repository.
+Project context and working rules for this repository.
 
 ---
 
-## 0. Arbeitsweise (gilt für jede Aufgabe)
+## 0. Working method (applies to every task)
 
-1. **Immer erst ein Implementierungsplan**, bevor Code entsteht.
-2. **Bei Unklarheiten explizit nachfragen** statt Annahmen still zu treffen.
-3. **Alternativen aufzeigen**, wenn eine Lösung nicht Best Practice ist — inklusive Begründung.
-4. **In realistische Arbeitsschritte teilen**, damit pro Schritt in die Tiefe gegangen werden kann.
+1. **Always start with an implementation plan** before writing code.
+2. **Ask explicitly when something is unclear** instead of silently making assumptions.
+3. **Point out alternatives** when a solution isn't best practice — including the reasoning.
+4. **Break work into realistic steps** so each step can be tackled in depth.
 
 ---
 
-## 1. Produkt
+## 1. Product
 
-Video-Plattform mit nutzergenerierten Uploads.
+Video platform with user-generated uploads.
 
-| Regel | Ausprägung |
+| Rule | Behavior |
 |---|---|
-| Videos ansehen | Öffentlich, **ohne** Registrierung |
-| Videos hochladen | Nur mit Account |
-| Sichtbarkeit | `PUBLIC` oder `PRIVATE` — **kein** Unlisted, **kein** Draft |
-| `PRIVATE` | Ausschließlich für den Besitzer sichtbar, keine Teilen-Funktion |
-| Kategorien | Feste Taxonomie, admin-gepflegt. **Ein Video = genau eine Kategorie** |
-| Freigabe | Direkt live nach Verarbeitung, keine Vorab-Moderation |
-| Moderation | Nachträglich auf Meldung durch Nutzer |
-| Max. Dateigröße | **3.000 MB** |
-| Max. Dauer | **2 Stunden** |
-| Erwartete Last | ~20 gleichzeitige Zuschauer |
-| Livestreaming | Nicht vorgesehen |
+| Watching videos | Public, **without** registration |
+| Uploading videos | Account required |
+| Visibility | `PUBLIC` or `PRIVATE` — **no** Unlisted, **no** Draft |
+| `PRIVATE` | Visible only to the owner, no sharing feature |
+| Categories | Fixed taxonomy, admin-maintained. **One video = exactly one category** |
+| Publishing | Goes live immediately after processing, no pre-moderation |
+| Moderation | Retroactive, triggered by user reports |
+| Max. file size | **3,000 MB** |
+| Max. duration | **2 hours** |
+| Expected load | ~20 concurrent viewers |
+| Livestreaming | Not planned |
 
 ---
 
-## 2. Techstack
+## 2. Tech stack
 
-| Ebene | Technologie |
+| Layer | Technology |
 |---|---|
 | Backend | Spring Boot 4.1.1, Java 25, Gradle |
-| Datenbank | PostgreSQL 17 |
+| Database | PostgreSQL 17 |
 | Migrations | Flyway (`ddl-auto=validate`) |
-| Object Storage | Garage oder MinIO (S3-kompatibel), Zugriff via AWS SDK v2 |
-| Transcoding | FFmpeg als externer Prozess |
-| Frontend | Angular (aktuelle Version, Standalone Components) |
-| Reverse Proxy | Caddy (automatisches TLS) |
+| Object storage | Garage or MinIO (S3-compatible), accessed via AWS SDK v2 |
+| Transcoding | FFmpeg as an external process |
+| Frontend | Angular (current version, standalone components) |
+| Reverse proxy | Caddy (automatic TLS) |
 | Hosting | Hetzner Cloud |
 | Monitoring | Actuator + Micrometer → Prometheus + Grafana |
 
-**Alle Komponenten sind Open Source und selfhostbar.** Keine Managed Services.
+**All components are open source and self-hostable.** No managed services.
 
 ---
 
-## 3. Architekturprinzipien
+## 3. Architecture principles
 
-### 3.1 Ein Service, zwei Rollen
+### 3.1 One service, two roles
 
-Es gibt **genau ein Gradle-Projekt, ein JAR, ein Image**. Zwei Spring-Profile steuern die Rolle:
+There is **exactly one Gradle project, one JAR, one image**. Two Spring profiles control the role:
 
-- `api` — HTTP-Endpunkte
-- `worker` — Job-Poller und FFmpeg
+- `api` — HTTP endpoints
+- `worker` — job poller and FFmpeg
 
-**Start:** beide zusammen in einem Container (`SPRING_PROFILES_ACTIVE=api,worker`).
-**Bei Lastproblemen:** zweiter Container aus demselben Image, nur mit `worker`. Kein zweites Projekt, kein zweites Repo.
+**Startup:** both together in one container (`SPRING_PROFILES_ACTIVE=api,worker`).
+**Under load:** a second container from the same image, `worker` only. No second project, no second repo.
 
-> Grund: FFmpeg im API-Prozess ohne Trennung würde bei einem 2-Stunden-Transcode die Request-Threads blockieren.
+> Reason: running FFmpeg inside the API process without separation would block request threads during a 2-hour transcode.
 
-### 3.2 Feste Regeln
+### 3.2 Fixed rules
 
-- ❌ **Niemals** Video-Bytes durch Spring MVC (`MultipartFile`) leiten → presigned S3 Multipart.
-- ❌ **Niemals** `spring.jpa.hibernate.ddl-auto=update` → Flyway, `validate`.
-- ❌ **Niemals** JPA-Entities direkt als API-Response → DTOs.
-- ❌ **Kein** `OFFSET`-Paging im Katalog → Cursor-Pagination.
-- ✅ Sichtbarkeitslogik existiert **an genau einer Stelle** (`VisibilityPolicy`), nicht in jeder Query dupliziert.
-- ✅ Fehler als RFC-9457 `ProblemDetail` über einen globalen `@RestControllerAdvice`.
-- ✅ Jeder Endpunkt mit schreibendem Zugriff prüft Ownership per `@PreAuthorize`.
+- ❌ **Never** stream video bytes through Spring MVC (`MultipartFile`) → presigned S3 multipart.
+- ❌ **Never** `spring.jpa.hibernate.ddl-auto=update` → Flyway, `validate`.
+- ❌ **Never** expose JPA entities directly as API responses → DTOs.
+- ❌ **No** `OFFSET` paging in the catalog → cursor pagination.
+- ✅ Visibility logic exists **in exactly one place** (`VisibilityPolicy`), not duplicated in every query.
+- ✅ Errors as RFC-9457 `ProblemDetail` via a global `@RestControllerAdvice`.
+- ✅ Every endpoint with write access checks ownership via `@PreAuthorize`.
 
-### 3.3 Boot-4-Stolpersteine
+### 3.3 Boot 4 pitfalls
 
-- Starter heißt `spring-boot-starter-webmvc` (nicht `-web`).
-- Flyway wird **nicht** mehr autokonfiguriert, wenn nur das JAR da ist → `spring-boot-starter-flyway` nötig.
-- **Jackson 3**: Imports lauten `tools.jackson.*`, nicht `com.fasterxml.jackson.*`.
-- **JUnit 6**: alte Slice-Annotationen und Test-Utilities teilweise entfernt.
-- Zu jedem Starter gibt es einen Test-Starter (`spring-boot-starter-webmvc-test` usw.).
-- Boot-3- und Boot-4-Artefakte **nicht** mischen.
+- The starter is called `spring-boot-starter-webmvc` (not `-web`).
+- Flyway is **no longer** autoconfigured when only the JAR is present → `spring-boot-starter-flyway` is required.
+- **Jackson 3**: imports are `tools.jackson.*`, not `com.fasterxml.jackson.*`.
+- **JUnit 6**: some old slice annotations and test utilities have been removed.
+- Every starter has a matching test starter (`spring-boot-starter-webmvc-test`, etc.).
+- Don't mix Boot 3 and Boot 4 artifacts.
 
 ---
 
@@ -100,7 +100,7 @@ dependencies {
 
     implementation 'software.amazon.awssdk:s3'
     implementation 'org.bouncycastle:bcprov-jdk18on'      // Argon2id
-    implementation 'com.bucket4j:bucket4j-core'           // Rate Limiting
+    implementation 'com.bucket4j:bucket4j-core'           // Rate limiting
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui'
 
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
@@ -119,13 +119,13 @@ dependencies {
 }
 ```
 
-⚠️ **Alle Versionen explizit pinnen**, keine `2.+`-Ranges. Springdoc vor dem Einbau gegen Boot-4-Kompatibilität prüfen.
+⚠️ **Pin all versions explicitly**, no `2.+` ranges. Check Springdoc for Boot 4 compatibility before adding it.
 
 ---
 
-## 5. Package-Struktur
+## 5. Package structure
 
-Fachliche Schnitte, **keine** `controller`/`service`/`repository`-Schichtpakete.
+Feature-based cuts, **not** `controller`/`service`/`repository` layer packages.
 
 ```
 com.bjarne.videoservice
@@ -138,11 +138,11 @@ com.bjarne.videoservice
 └── shared/          ApiError, CursorPage, exceptions, ClockConfig
 ```
 
-Spring Modulith zur Durchsetzung der Grenzen: **erst ab AP5** einführen, vorher bremst es.
+Spring Modulith to enforce the boundaries: introduce **only from AP5 onward** — earlier it just slows things down.
 
 ---
 
-## 6. Datenmodell
+## 6. Data model
 
 ```
 users             id(uuid) email(citext unique) username(unique) password_hash
@@ -169,10 +169,10 @@ transcode_jobs    id video_id status attempts max_attempts
 reports           id video_id reporter_user_id reason detail
                   status(OPEN|REVIEWED|DISMISSED) handled_by handled_at created_at
 
-video_view_stats  video_id day views     -- PK (video_id, day), aggregiert
+video_view_stats  video_id day views     -- PK (video_id, day), aggregated
 ```
 
-**Pflichtindizes ab V1:**
+**Required indexes from V1:**
 
 ```sql
 videos(status, visibility, published_at DESC)
@@ -182,134 +182,134 @@ transcode_jobs(status, scheduled_at)
 refresh_tokens(user_id), refresh_tokens(token_hash)
 ```
 
-**Kein** `email_verified_at` — keine E-Mail-Verifikation vorgesehen.
-**Kein** `DRAFT` — `visibility` wird beim Upload-Init gesetzt und ist ab `READY` wirksam.
+**No** `email_verified_at` — no email verification planned.
+**No** `DRAFT` — `visibility` is set at upload init and takes effect from `READY` onward.
 
 ---
 
-## 7. API-Oberfläche
+## 7. API surface
 
-| Methode | Pfad | Auth | Zweck |
+| Method | Path | Auth | Purpose |
 |---|---|---|---|
-| POST | `/api/auth/register` | – | Registrierung (E-Mail + Passwort) |
-| POST | `/api/auth/login` | – | Access-Token + Refresh-Cookie |
+| POST | `/api/auth/register` | – | Registration (email + password) |
+| POST | `/api/auth/login` | – | Access token + refresh cookie |
 | POST | `/api/auth/refresh` | Cookie | Rotation |
-| POST | `/api/auth/logout` | Cookie | Widerruf |
-| GET | `/api/me` | JWT | Eigenes Profil |
-| GET | `/api/categories` | – | Kategorienliste |
+| POST | `/api/auth/logout` | Cookie | Revocation |
+| GET | `/api/me` | JWT | Own profile |
+| GET | `/api/categories` | – | Category list |
 | GET | `/api/videos` | optional | `?category=&sort=&cursor=&limit=` |
-| GET | `/api/videos/{slug}` | optional | Detail, 404 bei fremdem `PRIVATE` |
-| GET | `/api/me/videos` | JWT | Eigene Videos inkl. `PRIVATE` |
-| GET | `/api/users/{username}/videos` | optional | Kanalseite, nur `PUBLIC` |
-| POST | `/api/videos` | JWT | Upload initiieren → `videoId` + Part-URLs |
-| POST | `/api/videos/{id}/complete` | JWT+Owner | Multipart abschließen → Job |
-| GET | `/api/videos/{id}/status` | JWT+Owner | Verarbeitungsfortschritt |
-| PATCH | `/api/videos/{id}` | JWT+Owner | Titel, Beschreibung, Kategorie, Sichtbarkeit |
-| DELETE | `/api/videos/{id}` | JWT+Owner | Löschen inkl. S3-Cleanup |
-| GET | `/api/videos/{id}/manifest` | optional | Playlist-URL (signiert bei `PRIVATE`) |
-| POST | `/api/videos/{id}/report` | JWT | Meldung |
-| POST | `/api/videos/{id}/view` | – | View-Zählung, dedupliziert |
-| GET/POST | `/api/admin/**` | ADMIN | Kategorien, Reports, Sperren |
+| GET | `/api/videos/{slug}` | optional | Detail, 404 for someone else's `PRIVATE` |
+| GET | `/api/me/videos` | JWT | Own videos incl. `PRIVATE` |
+| GET | `/api/users/{username}/videos` | optional | Channel page, `PUBLIC` only |
+| POST | `/api/videos` | JWT | Initiate upload → `videoId` + part URLs |
+| POST | `/api/videos/{id}/complete` | JWT+Owner | Complete multipart → job |
+| GET | `/api/videos/{id}/status` | JWT+Owner | Processing progress |
+| PATCH | `/api/videos/{id}` | JWT+Owner | Title, description, category, visibility |
+| DELETE | `/api/videos/{id}` | JWT+Owner | Delete incl. S3 cleanup |
+| GET | `/api/videos/{id}/manifest` | optional | Playlist URL (signed for `PRIVATE`) |
+| POST | `/api/videos/{id}/report` | JWT | Report |
+| POST | `/api/videos/{id}/view` | – | View counting, deduplicated |
+| GET/POST | `/api/admin/**` | ADMIN | Categories, reports, bans |
 
-> Bei fremdem `PRIVATE`-Video **404 statt 403** — 403 bestätigt die Existenz.
+> For someone else's `PRIVATE` video: **404, not 403** — 403 would confirm the video's existence.
 
 ---
 
-## 8. Auth-Design
+## 8. Auth design
 
-| Aspekt | Entscheidung |
+| Aspect | Decision |
 |---|---|
-| Identity | Vollständig im Backend, kein externer IdP |
-| Passwort | Argon2id |
-| Access-Token | JWT, 15 min, selbst signiert (RSA/EC via Nimbus), validiert über Resource-Server |
-| Ablage Access-Token | Angular-Memory, **nicht** `localStorage` (XSS) |
-| Refresh-Token | `HttpOnly` + `Secure` + `SameSite=Strict` Cookie, 30 Tage |
-| Rotation | Bei jedem Refresh, alter Token wird ersetzt |
-| Reuse-Detection | Bereits ersetzter Token vorgelegt → gesamte Token-Familie widerrufen |
-| Session | Stateless, CSRF-Schutz nur auf dem Cookie-basierten Refresh-Pfad |
+| Identity | Fully in-house in the backend, no external IdP |
+| Password | Argon2id |
+| Access token | JWT, 15 min, self-signed (RSA/EC via Nimbus), validated via resource server |
+| Access token storage | Angular memory, **not** `localStorage` (XSS) |
+| Refresh token | `HttpOnly` + `Secure` + `SameSite=Strict` cookie, 30 days |
+| Rotation | On every refresh, old token is replaced |
+| Reuse detection | An already-replaced token is presented → the entire token family is revoked |
+| Session | Stateless, CSRF protection only on the cookie-based refresh path |
 
 ---
 
-## 9. Medien-Pipeline
+## 9. Media pipeline
 
 ### 9.1 Upload
 
 ```
-POST /api/videos          → Validierung, upload_session, CreateMultipartUpload
-                          → presigned Part-URLs (Chunks 64–128 MB)
-Browser → Storage         → Parts direkt hochladen, Retry pro Part
-POST /{id}/complete       → CompleteMultipartUpload, Job einreihen
+POST /api/videos          → validation, upload_session, CreateMultipartUpload
+                          → presigned part URLs (64–128 MB chunks)
+Browser → Storage         → upload parts directly, retry per part
+POST /{id}/complete       → CompleteMultipartUpload, enqueue job
 ```
 
-Verwaiste Sessions: `AbortMultipartUpload` nach 24 h per Scheduled Job.
+Orphaned sessions: `AbortMultipartUpload` after 24 h via a scheduled job.
 
 ### 9.2 Transcoding
 
-1. `ffprobe` → **harte Validierung**: Videospur vorhanden, Dauer ≤ 2 h, Auflösung plausibel
-2. Ladder: **360p / 720p / 1080p**, H.264 High + AAC, HLS fMP4, Segmentlänge 4 s
-3. Thumbnail + Sprite-Sheet fürs Scrubbing
-4. Master-Playlist, Upload der Artefakte, Status → `READY`
+1. `ffprobe` → **hard validation**: video track present, duration ≤ 2 h, resolution plausible
+2. Ladder: **360p / 720p / 1080p**, H.264 High + AAC, HLS fMP4, 4 s segment length
+3. Thumbnail + sprite sheet for scrubbing
+4. Master playlist, upload the artifacts, status → `READY`
 
-**CPU-Gegenmaßnahmen (wichtig bei 2 h Maximaldauer):**
-- **Keine Renditions oberhalb der Quellauflösung.** 720p-Quelle → nur 360p + 720p.
-- **Stream-Copy prüfen:** Ist die Quelle bereits H.264/AAC in passender Auflösung, wird nur remuxt statt neu encodiert. Spart bei vielen Uploads den Großteil der Rechenzeit.
-- `-preset veryfast`, Single-Pass CRF.
-- Harter Timeout pro Job mit `destroyForcibly()`.
+**CPU countermeasures (important given the 2 h max duration):**
+- **No renditions above the source resolution.** 720p source → only 360p + 720p.
+- **Check for stream copy:** if the source is already H.264/AAC at a suitable resolution, it's only remuxed instead of re-encoded. Saves most of the compute time across many uploads.
+- `-preset veryfast`, single-pass CRF.
+- Hard timeout per job with `destroyForcibly()`.
 
-**Disk-Bedarf pro Job:** ~3 GB Quelle + ~5–7 GB Renditions ≈ **10 GB Temp**. Worker-Concurrency startet bei **1**.
+**Disk requirement per job:** ~3 GB source + ~5–7 GB renditions ≈ **10 GB temp**. Worker concurrency starts at **1**.
 
-### 9.3 Ausspielung und private Videos
+### 9.3 Delivery and private videos
 
-⚠️ **Zentraler Punkt:** Private Videos brauchen Schutz auf Segment-Ebene. Unguessable Keys reichen nicht.
+⚠️ **Key point:** private videos need protection at the segment level. Unguessable keys aren't enough.
 
-**Lösung — getrennte Prefixes:**
+**Solution — separate prefixes:**
 
-| Prefix | Auslieferung | Caching |
+| Prefix | Delivery | Caching |
 |---|---|---|
-| `public/{videoId}/…` | Caddy → Bucket, direkt | `immutable, max-age=31536000` auf Segmente |
-| `private/{videoId}/…` | Bucket nicht öffentlich. Backend generiert Playlist zur Laufzeit mit presigned Segment-URLs (TTL 3 h) | `no-store` |
+| `public/{videoId}/…` | Caddy → bucket, direct | `immutable, max-age=31536000` on segments |
+| `private/{videoId}/…` | Bucket not public. Backend generates the playlist at runtime with presigned segment URLs (TTL 3 h) | `no-store` |
 
-Beim Wechsel der Sichtbarkeit werden die Objekte zwischen den Prefixes verschoben.
+When visibility changes, the objects are moved between prefixes.
 
-*Alternative:* Caddy `forward_auth` gegen einen internen Spring-Endpunkt. Hält die Playlists statisch, erfordert aber, dass Segment-Requests ein Auth-Token mitführen — mit `hls.js` und Memory-Token unbequem. **Nicht empfohlen.**
+*Alternative:* Caddy `forward_auth` against an internal Spring endpoint. Keeps playlists static, but requires segment requests to carry an auth token — awkward with `hls.js` and a memory-held token. **Not recommended.**
 
 ---
 
-## 10. Arbeitspakete
+## 10. Work packages
 
-| AP | Inhalt | Aufwand | Status |
+| AP | Content | Effort | Status |
 |---|---|---|---|
-| **AP0** | Fundament: docker-compose (Postgres + Garage), Config-Properties, Profile, `ProblemDetail`-Advice, Actuator abgesichert | 0,5 d | ⬜ |
-| **AP1** | Persistenz: Flyway `V1__init.sql`, Entities, `validate`, Kategorie-Seed, Testcontainers-Basis | 0,5 d | ⬜ |
-| **AP2** | Auth: JwtService, SecurityFilterChain, Register, Login, Refresh mit Rotation + Reuse-Detection, Logout, `/me` | 1,5 d | ⬜ |
-| **AP3** | Upload: Init, presigned Multipart, Complete, Bucket-CORS, Cleanup-Job, Quotas | 2 d | ⬜ |
-| **AP4** | Transcoding: JobPoller (`SKIP LOCKED`), ffprobe-Validierung, FFmpeg-Ladder, Thumbnails, Retry/Backoff | 2–3 d | ⬜ |
-| **AP5** | Katalog: öffentliche Endpunkte, Cursor-Pagination, Kategorie-Filter, `VisibilityPolicy`, DTOs | 1 d | ⬜ |
-| **AP6** | Ausspielung: Caddy-Routing, Cache-Header, Range-Requests, signierte Playlists für `PRIVATE` | 1 d | ⬜ |
-| **AP7** | Härtung: Rate-Limits, Validierung, Ownership, Löschen + S3-Cleanup, View-Counting, Reports, Admin-Sperre, Audit-Log | 1,5 d | ⬜ |
-| **AP8** | Hetzner: Sizing, Volumes, Backups, Deploy-Pipeline, TLS | 1 d | ⬜ |
-| **AP9** | Observability: JSON-Logs mit Correlation-ID, Metriken, Prometheus/Grafana, Queue-Alerting | 0,5 d | ⬜ |
+| **AP0** | Foundation: docker-compose (Postgres + Garage), config properties, profiles, `ProblemDetail` advice, Actuator secured | 0.5 d | ⬜ |
+| **AP1** | Persistence: Flyway `V1__init.sql`, entities, `validate`, category seed, testcontainers base | 0.5 d | ⬜ |
+| **AP2** | Auth: JwtService, SecurityFilterChain, register, login, refresh with rotation + reuse detection, logout, `/me` | 1.5 d | ⬜ |
+| **AP3** | Upload: init, presigned multipart, complete, bucket CORS, cleanup job, quotas | 2 d | ⬜ |
+| **AP4** | Transcoding: JobPoller (`SKIP LOCKED`), ffprobe validation, FFmpeg ladder, thumbnails, retry/backoff | 2–3 d | ⬜ |
+| **AP5** | Catalog: public endpoints, cursor pagination, category filter, `VisibilityPolicy`, DTOs | 1 d | ⬜ |
+| **AP6** | Delivery: Caddy routing, cache headers, range requests, signed playlists for `PRIVATE` | 1 d | ⬜ |
+| **AP7** | Hardening: rate limits, validation, ownership, delete + S3 cleanup, view counting, reports, admin ban, audit log | 1.5 d | ⬜ |
+| **AP8** | Hetzner: sizing, volumes, backups, deploy pipeline, TLS | 1 d | ⬜ |
+| **AP9** | Observability: JSON logs with correlation ID, metrics, Prometheus/Grafana, queue alerting | 0.5 d | ⬜ |
 
-**Riskantestes Paket: AP4.** FFmpeg-Fehlerbilder sind vielfältig — kaputte Container, exotische Codecs, HDR-Quellen, 0-Byte-Dateien. Puffer einplanen.
+**Riskiest package: AP4.** FFmpeg failure modes are wide-ranging — broken containers, exotic codecs, HDR sources, 0-byte files. Plan for buffer time.
 
 ---
 
 ## 11. Deployment (Hetzner)
 
-⚠️ **Nicht auf CX-Shared-vCPU transcodieren.** Steal Time macht Laufzeiten unvorhersehbar. Empfehlung: **CCX23/CCX33** (dedizierte vCPU) oder AX-Dedicated.
+⚠️ **Don't transcode on CX shared vCPU.** Steal time makes runtimes unpredictable. Recommendation: **CCX23/CCX33** (dedicated vCPU) or AX dedicated.
 
-- Volume für Bucket-Daten und Temp-Space, **nicht** die Boot-Disk
-- Backups: `pg_dump` nach S3 + Bucket-Versionierung
-- Deploy: GitHub Actions → Registry → `docker compose pull && up -d`
-- Caddy übernimmt TLS automatisch
+- Volume for bucket data and temp space, **not** the boot disk
+- Backups: `pg_dump` to S3 + bucket versioning
+- Deploy: GitHub Actions → registry → `docker compose pull && up -d`
+- Caddy handles TLS automatically
 
-**Speicherrechnung:** 1 h Quelle ≈ 2–4 GB, Renditions zusätzlich ~1,5–2 GB.
-500 Videos à 20 min ≈ **400–700 GB**. Vor der Volume-Bestellung mit realistischen Zahlen nachrechnen.
+**Storage estimate:** 1 h source ≈ 2–4 GB, renditions add ~1.5–2 GB.
+500 videos at 20 min each ≈ **400–700 GB**. Recalculate with realistic numbers before ordering the volume.
 
 ---
 
-## 12. Rechtlicher Rahmen (DE/EU)
+## 12. Legal framework (DE/EU)
 
-Eine Plattform mit Nutzer-Uploads unterliegt DSA-Pflichten (Melde- und Abhilfeverfahren, Begründung bei Sperrung), Impressumspflicht und Urheberrechtsthemen. Deshalb sind `status=BLOCKED`, der Report-Endpunkt und ein Audit-Log **von Anfang an** Teil des Designs (AP7) und kein Nachrüstthema.
+A platform with user uploads is subject to DSA obligations (notice-and-action procedures, justification when blocking content), German Impressum requirements, and copyright issues. That's why `status=BLOCKED`, the report endpoint, and an audit log are part of the design **from the start** (AP7), not something retrofitted later.
 
-Für die konkrete rechtliche Ausgestaltung — Nutzungsbedingungen, Datenschutzerklärung, Verfahrensfristen — ist anwaltliche Beratung nötig. Dieser Plan ersetzt sie nicht.
+Actual legal drafting — terms of service, privacy policy, procedural deadlines — requires legal counsel. This plan does not replace it.

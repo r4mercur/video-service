@@ -3,7 +3,7 @@ package com.bjarne.videoservice.catalog;
 import jakarta.validation.constraints.Size;
 
 /**
- * Echte PATCH-Semantik: nur nicht-null Felder werden angewendet (siehe VideoManagementService).
+ * True PATCH semantics: only non-null fields are applied (see VideoManagementService).
  */
 public record UpdateVideoRequest(
         @Size(min = 1, max = 200) String title,

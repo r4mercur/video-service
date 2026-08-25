@@ -11,11 +11,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Reiner Scheduler/Orchestrator - alle DB-Uebergaenge laufen ueber {@link TranscodeJobLifecycle},
- * die eigentliche Arbeit ueber {@link TranscodeService}. Worker-Concurrency=1 (CLAUDE.md 9.2)
- * ergibt sich daraus, dass pro Tick hoechstens ein Job verarbeitet wird und der naechste Tick
- * erst nach Rueckkehr dieser Methode startet - kein Thread-Pool noetig. Aktiv nur im worker-Profil
- * (WorkerConfig aktiviert @EnableScheduling nur dort).
+ * Pure scheduler/orchestrator - all DB transitions go through {@link TranscodeJobLifecycle},
+ * the actual work through {@link TranscodeService}. Worker concurrency=1 (CLAUDE.md 9.2)
+ * follows from the fact that at most one job is processed per tick and the next tick only
+ * starts after this method returns - no thread pool needed. Active only in the worker profile
+ * (WorkerConfig only enables @EnableScheduling there).
  */
 @Component
 public class JobPoller {
@@ -41,18 +41,18 @@ public class JobPoller {
             return;
         }
         ClaimedJob job = claimed.get();
-        log.info("Job {} fuer Video {} geclaimt von {}", job.jobId(), job.videoId(), workerId);
+        log.info("Job {} for video {} claimed by {}", job.jobId(), job.videoId(), workerId);
 
         try {
             TranscodeOutcome outcome = transcodeService.process(job.videoId(), job.jobId());
             lifecycle.recordSuccess(job.jobId(), job.videoId(), outcome);
-            log.info("Job {} fuer Video {} erfolgreich abgeschlossen", job.jobId(), job.videoId());
+            log.info("Job {} for video {} completed successfully", job.jobId(), job.videoId());
         } catch (MediaValidationException e) {
-            log.warn("Job {} fuer Video {} endgueltig fehlgeschlagen (Validierung): {}",
+            log.warn("Job {} for video {} failed permanently (validation): {}",
                     job.jobId(), job.videoId(), e.getMessage());
             lifecycle.recordValidationFailure(job.jobId(), job.videoId(), e.getMessage());
         } catch (Exception e) {
-            log.error("Job {} fuer Video {} fehlgeschlagen, wird ggf. erneut versucht", job.jobId(), job.videoId(), e);
+            log.error("Job {} for video {} failed, may be retried", job.jobId(), job.videoId(), e);
             lifecycle.recordTransientFailure(job.jobId(), job.videoId(), String.valueOf(e.getMessage()));
         }
     }

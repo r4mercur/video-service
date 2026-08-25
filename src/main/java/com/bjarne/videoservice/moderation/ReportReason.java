@@ -1,7 +1,7 @@
 package com.bjarne.videoservice.moderation;
 
 /**
- * Feste Taxonomie statt Freitext - bessere Triage fuer Admins bei der Report-Pruefung (AP7).
+ * Fixed taxonomy instead of free text - better triage for admins when reviewing reports (AP7).
  */
 public enum ReportReason {
     COPYRIGHT,

@@ -8,10 +8,10 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 /**
- * Presignte GetObject-URLs fuer Objekte privater Videos (CLAUDE.md 9.3, TTL 3h) - HLS-Segmente/
- * Init-Dateien (siehe {@link PlaylistRewriter}) genauso wie Thumbnail/Sprite-Sheet (siehe
- * {@link MediaUrlResolver}). Der Browser laedt die Bytes damit direkt vom Storage, nicht ueber
- * das Backend.
+ * Presigned GetObject URLs for objects of private videos (CLAUDE.md 9.3, TTL 3h) - HLS
+ * segments/init files (see {@link PlaylistRewriter}) as well as thumbnail/sprite sheet (see
+ * {@link MediaUrlResolver}). This lets the browser load the bytes directly from storage,
+ * not through the backend.
  */
 @Component
 public class ObjectPresigner {

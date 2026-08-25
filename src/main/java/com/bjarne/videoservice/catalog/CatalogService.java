@@ -24,9 +24,10 @@ public class CatalogService {
     private static final int MAX_LIMIT = 50;
 
     /**
-     * Sentinel fuer "kein Cursor" (erste Seite): garantiert nach jedem echten published_at/createdAt
-     * liegend, damit die Keyset-Query ohne separate "cursorTs IS NULL"-Verzweigung auskommt - Postgres
-     * kann sonst den Parametertyp einer bare IS-NULL-Pruefung nicht auflösen (SQLState 42P18).
+     * Sentinel for "no cursor" (first page): guaranteed to sort after every real
+     * published_at/createdAt, so the keyset query doesn't need a separate "cursorTs IS NULL"
+     * branch - otherwise Postgres can't resolve the parameter type of a bare IS-NULL check
+     * (SQLState 42P18).
      */
     private static final Instant NO_CURSOR_TS = Instant.parse("9999-12-31T23:59:59Z");
     private static final UUID NO_CURSOR_ID = new UUID(-1L, -1L);

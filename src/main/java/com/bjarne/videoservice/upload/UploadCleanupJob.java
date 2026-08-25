@@ -13,8 +13,8 @@ import java.time.Clock;
 import java.util.List;
 
 /**
- * Bricht verwaiste Multipart-Uploads ab (CLAUDE.md 9.1: AbortMultipartUpload nach 24h).
- * Nur relevant, wenn @EnableScheduling aktiv ist, also im "worker"-Profil (siehe WorkerConfig).
+ * Aborts orphaned multipart uploads (CLAUDE.md 9.1: AbortMultipartUpload after 24h).
+ * Only relevant when @EnableScheduling is active, i.e. in the "worker" profile (see WorkerConfig).
  */
 @Component
 public class UploadCleanupJob {
@@ -49,7 +49,7 @@ public class UploadCleanupJob {
             session.setCompletedAt(clock.instant());
             uploadSessionRepository.save(session);
 
-            log.info("Verwaiste Upload-Session {} fuer Video {} abgebrochen", session.getId(), video.getId());
+            log.info("Aborted orphaned upload session {} for video {}", session.getId(), video.getId());
         }
     }
 }

@@ -12,10 +12,11 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import java.util.UUID;
 
 /**
- * Ausspielung von Manifest/Playlists (AP6, CLAUDE.md 9.3). Sichtbarkeits-/Ownership-Pruefung
- * laeuft ausschliesslich ueber {@link VisibilityPolicy} (CLAUDE.md 3.2) - hier nicht dupliziert.
- * Bei fremdem PRIVATE-Video oder noch nicht verarbeitetem Video gibt es bewusst ueberall 404
- * statt 403 (CLAUDE.md Abschnitt 7: 403 wuerde die Existenz des Videos verraten).
+ * Delivery of manifest/playlists (AP6, CLAUDE.md 9.3). Visibility/ownership checks run
+ * exclusively through {@link VisibilityPolicy} (CLAUDE.md 3.2) - not duplicated here.
+ * For someone else's PRIVATE video or a video that hasn't been processed yet, everything
+ * deliberately returns 404 instead of 403 (CLAUDE.md section 7: 403 would reveal the video's
+ * existence).
  */
 @Service
 @Transactional(readOnly = true)

@@ -7,13 +7,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Reine Text-Transformation einer HLS-Rendition-Playlist (kein Storage-/DB-Zugriff, daher ohne
- * Spring-Kontext gut testbar). Die Master-Playlist selbst braucht KEIN Rewriting: wird sie unter
- * {@code /api/videos/{id}/master.m3u8} ausgeliefert, loesen HLS-Player die darin enthaltenen
- * relativen Rendition-Pfade (z.B. "360p/playlist.m3u8") automatisch gegen genau diese URL auf -
- * das trifft zufaellig exakt den Rendition-Endpunkt. Nur innerhalb einer Rendition-Playlist muss
- * jede Segment-/Init-Referenz durch eine absolute presignte Storage-URL ersetzt werden, sonst
- * wuerde der Player versuchen, Segmente vom Backend statt direkt vom Storage zu laden.
+ * Pure text transformation of an HLS rendition playlist (no storage/DB access, hence easily
+ * testable without a Spring context). The master playlist itself needs NO rewriting: when
+ * delivered under {@code /api/videos/{id}/master.m3u8}, HLS players automatically resolve the
+ * relative rendition paths it contains (e.g. "360p/playlist.m3u8") against exactly this URL -
+ * which happens to land exactly on the rendition endpoint. Only within a rendition playlist
+ * does every segment/init reference need to be replaced with an absolute presigned storage URL,
+ * otherwise the player would try to load segments from the backend instead of directly from
+ * storage.
  */
 @Component
 public class PlaylistRewriter {
