@@ -207,7 +207,7 @@ refresh_tokens(user_id), refresh_tokens(token_hash)
 | PATCH | `/api/videos/{id}` | JWT+Owner | Title, description, category, visibility |
 | DELETE | `/api/videos/{id}` | JWT+Owner | Delete incl. S3 cleanup |
 | GET | `/api/videos/{id}/manifest` | optional | Playlist URL (signed for `PRIVATE`) |
-| POST | `/api/videos/{id}/report` | JWT | Report |
+| POST | `/api/videos/{id}/report` | optional | Report; anonymous allowed (DSA notice-and-action), IP-rate-limited stricter than logged-in |
 | POST | `/api/videos/{id}/view` | – | View counting, deduplicated |
 | GET/POST | `/api/admin/**` | ADMIN | Categories, reports, bans |
 

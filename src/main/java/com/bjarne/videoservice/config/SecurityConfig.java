@@ -111,7 +111,8 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/manifest"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/master.m3u8"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/*/playlist.m3u8"),
-                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/videos/*/view")
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/videos/*/view"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/videos/*/report")
         );
         return request -> {
             String token = delegate.resolve(request);
@@ -177,7 +178,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/categories", "/api/videos", "/api/videos/*",
                                 "/api/users/*/videos", "/api/videos/*/manifest", "/api/videos/*/master.m3u8",
                                 "/api/videos/*/*/playlist.m3u8").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/videos/*/view").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/view", "/api/videos/*/report").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )

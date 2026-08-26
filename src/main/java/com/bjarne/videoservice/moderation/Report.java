@@ -2,17 +2,7 @@ package com.bjarne.videoservice.moderation;
 
 import com.bjarne.videoservice.catalog.Video;
 import com.bjarne.videoservice.identity.User;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
@@ -29,8 +19,8 @@ public class Report {
     @JoinColumn(name = "video_id", nullable = false)
     private Video video;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "reporter_user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reporter_user_id")
     private User reporter;
 
     @Column(nullable = false)

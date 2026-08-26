@@ -30,15 +30,18 @@ public class ReportService {
     }
 
     @Transactional
-    public ReportResponse submit(UUID videoId, UUID reporterUserId, SubmitReportRequest request) {
-        if (!rateLimiter.tryConsumeReport(reporterUserId.toString())) {
+    public ReportResponse submit(UUID videoId, UUID reporterUserId, String clientIp, SubmitReportRequest request) {
+        boolean withinLimit = reporterUserId != null
+                ? rateLimiter.tryConsumeReport(reporterUserId.toString())
+                : rateLimiter.tryConsumeReportAnonymous(clientIp);
+        if (!withinLimit) {
             throw new TooManyRequestsException("Too many reports - please try again later");
         }
         Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
         if (!VisibilityPolicy.isVisibleTo(video, reporterUserId)) {
             throw new NotFoundException("Video not found");
         }
-        User reporter = userRepository.getReferenceById(reporterUserId);
+        User reporter = reporterUserId != null ? userRepository.getReferenceById(reporterUserId) : null;
         Report report = new Report(video, reporter, request.reason().name(), request.detail());
         reportRepository.save(report);
         return ReportResponse.from(report);

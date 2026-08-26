@@ -12,8 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
@@ -57,13 +59,15 @@ class ReportControllerIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
-    void submitReportWithoutAuthReturnsUnauthorized() throws Exception {
+    void submitReportWithoutAuthReturnsCreatedOpenReport() throws Exception {
         Video video = seedReadyVideo(saveUser(), Visibility.PUBLIC);
 
         mockMvc.perform(post("/api/videos/" + video.getId() + "/report")
+                        .with(remoteAddr(uniqueIp()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reportJson("SPAM", null)))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("OPEN"));
     }
 
     @Test
@@ -79,6 +83,17 @@ class ReportControllerIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void submitReportOnPrivateVideoWithoutAuthReturnsNotFound() throws Exception {
+        Video video = seedReadyVideo(saveUser(), Visibility.PRIVATE);
+
+        mockMvc.perform(post("/api/videos/" + video.getId() + "/report")
+                        .with(remoteAddr(uniqueIp()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson("OTHER", null)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void submitReportOnUnknownVideoReturnsNotFound() throws Exception {
         String accessToken = registerAndLogin();
 
@@ -87,6 +102,27 @@ class ReportControllerIntegrationTest extends AbstractPostgresIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reportJson("OTHER", null)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void exceedingAnonymousReportRateLimitReturnsTooManyRequests() throws Exception {
+        Video video = seedReadyVideo(saveUser(), Visibility.PUBLIC);
+        String ip = uniqueIp();
+
+        // Default limit: 3/hour (app.rate-limit.report-anonymous) - the 4th request must return 429.
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(post("/api/videos/" + video.getId() + "/report")
+                            .with(remoteAddr(ip))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(reportJson("SPAM", "attempt " + i)))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(post("/api/videos/" + video.getId() + "/report")
+                        .with(remoteAddr(ip))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson("SPAM", "one too many")))
+                .andExpect(status().isTooManyRequests());
     }
 
     @Test
@@ -108,6 +144,24 @@ class ReportControllerIntegrationTest extends AbstractPostgresIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reportJson("SPAM", "one too many")))
                 .andExpect(status().isTooManyRequests());
+    }
+
+    /**
+     * MockMvc requests otherwise all share the same client IP, which would make the
+     * anonymous-report rate-limit bucket (a singleton cache, not reset between tests) bleed
+     * across test methods. Each test that submits an anonymous report gets its own synthetic IP.
+     */
+    private static RequestPostProcessor remoteAddr(String ip) {
+        return (MockHttpServletRequest request) -> {
+            request.setRemoteAddr(ip);
+            return request;
+        };
+    }
+
+    private static final java.util.concurrent.atomic.AtomicInteger IP_SEQUENCE = new java.util.concurrent.atomic.AtomicInteger(1);
+
+    private static String uniqueIp() {
+        return "10.0.0." + IP_SEQUENCE.getAndIncrement();
     }
 
     private String reportJson(String reason, String detail) throws Exception {

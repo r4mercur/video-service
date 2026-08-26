@@ -12,7 +12,8 @@ class RateLimiterTest {
     private final RateLimiter rateLimiter = new RateLimiter(new RateLimitProperties(
             new RateLimitProperties.Limit(2, Duration.ofMinutes(15)),
             new RateLimitProperties.Limit(1, Duration.ofHours(1)),
-            new RateLimitProperties.Limit(3, Duration.ofHours(1))));
+            new RateLimitProperties.Limit(3, Duration.ofHours(1)),
+            new RateLimitProperties.Limit(1, Duration.ofHours(1))));
 
     @Test
     void allowsUpToCapacityThenDeniesForSameKey() {
@@ -37,5 +38,14 @@ class RateLimiterTest {
         assertThat(rateLimiter.tryConsumeReport("user-1")).isFalse();
 
         assertThat(rateLimiter.tryConsumeLogin("user-1")).isTrue();
+    }
+
+    @Test
+    void anonymousReportsUseTheirOwnStricterBucket() {
+        assertThat(rateLimiter.tryConsumeReportAnonymous("1.2.3.4")).isTrue();
+        assertThat(rateLimiter.tryConsumeReportAnonymous("1.2.3.4")).isFalse();
+
+        // Doesn't share capacity with the per-user report bucket.
+        assertThat(rateLimiter.tryConsumeReport("1.2.3.4")).isTrue();
     }
 }

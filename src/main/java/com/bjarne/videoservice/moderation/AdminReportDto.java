@@ -12,8 +12,9 @@ public record AdminReportDto(Long id, UUID videoId, String videoSlug, String vid
 
     public static AdminReportDto from(Report report) {
         Video video = report.getVideo();
+        String reporterUsername = report.getReporter() != null ? report.getReporter().getUsername() : null;
         return new AdminReportDto(report.getId(), video.getId(), video.getSlug(), video.getTitle(),
-                video.getStatus(), report.getReporter().getUsername(), report.getReason(), report.getDetail(),
+                video.getStatus(), reporterUsername, report.getReason(), report.getDetail(),
                 report.getStatus(), report.getCreatedAt());
     }
 }

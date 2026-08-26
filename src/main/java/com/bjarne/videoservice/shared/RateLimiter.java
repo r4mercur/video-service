@@ -20,18 +20,22 @@ public class RateLimiter {
     private final RateLimitProperties.Limit loginLimit;
     private final RateLimitProperties.Limit registerLimit;
     private final RateLimitProperties.Limit reportLimit;
+    private final RateLimitProperties.Limit reportAnonymousLimit;
 
     private final Cache<String, Bucket> loginBuckets;
     private final Cache<String, Bucket> registerBuckets;
     private final Cache<String, Bucket> reportBuckets;
+    private final Cache<String, Bucket> reportAnonymousBuckets;
 
     public RateLimiter(RateLimitProperties properties) {
         this.loginLimit = properties.login();
         this.registerLimit = properties.register();
         this.reportLimit = properties.report();
+        this.reportAnonymousLimit = properties.reportAnonymous();
         this.loginBuckets = buildCache(loginLimit);
         this.registerBuckets = buildCache(registerLimit);
         this.reportBuckets = buildCache(reportLimit);
+        this.reportAnonymousBuckets = buildCache(reportAnonymousLimit);
     }
 
     public boolean tryConsumeLogin(String ip) {
@@ -44,6 +48,10 @@ public class RateLimiter {
 
     public boolean tryConsumeReport(String userId) {
         return tryConsume(reportBuckets, userId, reportLimit);
+    }
+
+    public boolean tryConsumeReportAnonymous(String ip) {
+        return tryConsume(reportAnonymousBuckets, ip, reportAnonymousLimit);
     }
 
     private boolean tryConsume(Cache<String, Bucket> cache, String key, RateLimitProperties.Limit limit) {
