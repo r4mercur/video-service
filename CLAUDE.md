@@ -10,6 +10,7 @@ Project context and working rules for this repository.
 2. **Ask explicitly when something is unclear** instead of silently making assumptions.
 3. **Point out alternatives** when a solution isn't best practice — including the reasoning.
 4. **Break work into realistic steps** so each step can be tackled in depth.
+5. **Code and Comments should be in English**.
 
 ---
 
@@ -156,7 +157,7 @@ videos            id(uuid) user_id category_id(NOT NULL) title description slug(
                   status(UPLOADING|PROCESSING|READY|FAILED|BLOCKED)
                   visibility(PUBLIC|PRIVATE)
                   duration_seconds width height size_bytes
-                  storage_prefix playlist_key thumbnail_key
+                  storage_prefix playlist_key thumbnail_key has_custom_thumbnail
                   published_at created_at updated_at
 
 video_renditions  video_id height bitrate_kbps playlist_key size_bytes
@@ -206,6 +207,8 @@ refresh_tokens(user_id), refresh_tokens(token_hash)
 | GET | `/api/videos/{id}/status` | JWT+Owner | Processing progress |
 | PATCH | `/api/videos/{id}` | JWT+Owner | Title, description, category, visibility |
 | DELETE | `/api/videos/{id}` | JWT+Owner | Delete incl. S3 cleanup |
+| PUT | `/api/videos/{id}/thumbnail` | JWT+Owner | Upload custom thumbnail (multipart, `file` field) |
+| DELETE | `/api/videos/{id}/thumbnail` | JWT+Owner | Remove custom thumbnail, revert to auto-generated |
 | GET | `/api/videos/{id}/manifest` | optional | Playlist URL (signed for `PRIVATE`) |
 | POST | `/api/videos/{id}/report` | optional | Report; anonymous allowed (DSA notice-and-action), IP-rate-limited stricter than logged-in |
 | POST | `/api/videos/{id}/view` | – | View counting, deduplicated |
@@ -272,6 +275,27 @@ Orphaned sessions: `AbortMultipartUpload` after 24 h via a scheduled job.
 When visibility changes, the objects are moved between prefixes.
 
 *Alternative:* Caddy `forward_auth` against an internal Spring endpoint. Keeps playlists static, but requires segment requests to carry an auth token — awkward with `hls.js` and a memory-held token. **Not recommended.**
+
+### 9.4 Custom thumbnails
+
+The frame ffmpeg extracts during transcoding (9.2, `thumbnail.jpg`) is only the *default*. The
+owner can replace it with their own image via `PUT /api/videos/{id}/thumbnail`.
+
+- Stored under a separate key, `thumbnail_custom.jpg`, next to the auto-generated `thumbnail.jpg`
+  — never overwrites it. `videos.thumbnail_key` points at whichever is active;
+  `videos.has_custom_thumbnail` tracks which one that is.
+- A later re-transcode (including admin `POST /api/admin/videos/{id}/retranscode`) regenerates
+  `thumbnail.jpg` as usual but leaves an active custom thumbnail alone — it does not get
+  overwritten.
+- `DELETE /api/videos/{id}/thumbnail` deletes the custom object and reverts `thumbnail_key` back
+  to the auto-generated one.
+- Upload is a direct `multipart/form-data` request handled in the `api` process, not a presigned
+  S3 upload like the video source (9.1): a thumbnail is a few MB, hard-capped — a fundamentally
+  different risk profile than the GB-scale video bytes the "never MultipartFile" rule (3.2)
+  targets. For the same reason, normalizing/validating the image (ffmpeg, single-frame resize to
+  640px wide JPEG, mirroring the auto-thumbnail's own conventions) runs synchronously in the
+  request instead of via the worker job queue — well under a second, unlike a multi-hour
+  transcode.
 
 ---
 

@@ -1,17 +1,7 @@
 package com.bjarne.videoservice.catalog;
 
 import com.bjarne.videoservice.identity.User;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -71,6 +61,9 @@ public class Video {
 
     @Column(name = "thumbnail_key")
     private String thumbnailKey;
+
+    @Column(name = "has_custom_thumbnail", nullable = false)
+    private boolean hasCustomThumbnail = false;
 
     @Column(name = "source_key")
     private String sourceKey;
@@ -206,6 +199,14 @@ public class Video {
 
     public void setThumbnailKey(String thumbnailKey) {
         this.thumbnailKey = thumbnailKey;
+    }
+
+    public boolean isHasCustomThumbnail() {
+        return hasCustomThumbnail;
+    }
+
+    public void setHasCustomThumbnail(boolean hasCustomThumbnail) {
+        this.hasCustomThumbnail = hasCustomThumbnail;
     }
 
     public String getSourceKey() {

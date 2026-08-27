@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -27,5 +28,17 @@ public class VideoManagementController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         videoManagementService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/api/videos/{id}/thumbnail")
+    @PreAuthorize("@videoOwnership.isOwner(#id, authentication)")
+    public VideoDetailDto setThumbnail(@PathVariable UUID id, @RequestParam("file") MultipartFile file) {
+        return videoManagementService.setThumbnail(id, file);
+    }
+
+    @DeleteMapping("/api/videos/{id}/thumbnail")
+    @PreAuthorize("@videoOwnership.isOwner(#id, authentication)")
+    public VideoDetailDto removeThumbnail(@PathVariable UUID id) {
+        return videoManagementService.removeThumbnail(id);
     }
 }

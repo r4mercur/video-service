@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @SpringBootApplication
 @EnableConfigurationProperties({AuthProperties.class, S3Properties.class, UploadProperties.class,
         TranscodeProperties.class, DeliveryProperties.class, RateLimitProperties.class, ViewCountProperties.class,
-        ApiProperties.class})
+        ApiProperties.class, ThumbnailProperties.class})
 public class VideoServiceApplication {
 
     public static void main(String[] args) {

@@ -109,7 +109,7 @@ public class TranscodeJobLifecycle {
         video.setHeight(info.height());
         video.setDurationSeconds((int) Math.round(info.durationSeconds()));
         video.setPlaylistKey(video.getStoragePrefix() + "/master.m3u8");
-        if (outcome.hasThumbnail()) {
+        if (outcome.hasThumbnail() && !video.isHasCustomThumbnail()) {
             video.setThumbnailKey(video.getStoragePrefix() + "/thumbnail.jpg");
         }
         if (outcome.hasSprite()) {

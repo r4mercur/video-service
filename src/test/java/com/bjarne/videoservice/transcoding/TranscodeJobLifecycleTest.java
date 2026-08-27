@@ -173,6 +173,26 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void recordSuccessDoesNotOverwriteCustomThumbnail() {
+        Video video = seedVideo();
+        String customKey = video.getStoragePrefix() + "/thumbnail_custom.jpg";
+        video.setThumbnailKey(customKey);
+        video.setHasCustomThumbnail(true);
+        videoRepository.save(video);
+        TranscodeJob job = jobRepository.save(new TranscodeJob(video, clock.instant()));
+        MediaInfo info = new MediaInfo(true, true, 42.0, 1280, 720, "h264", "High", "aac");
+        PackagedRendition rendition = new PackagedRendition(720, 1280, 2500,
+                java.nio.file.Path.of("irrelevant"), 12345L);
+        TranscodeOutcome outcome = new TranscodeOutcome(info, List.of(rendition), true, true);
+
+        lifecycle.recordSuccess(job.getId(), video.getId(), outcome);
+
+        Video reloaded = videoRepository.findById(video.getId()).orElseThrow();
+        assertThat(reloaded.getThumbnailKey()).isEqualTo(customKey);
+        assertThat(reloaded.isHasCustomThumbnail()).isTrue();
+    }
+
+    @Test
     void recordValidationFailureFailsImmediatelyRegardlessOfAttempts() {
         Video video = seedVideo();
         TranscodeJob job = new TranscodeJob(video, clock.instant());

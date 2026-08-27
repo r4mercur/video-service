@@ -1,0 +1,2 @@
+ALTER TABLE videos
+    ADD COLUMN has_custom_thumbnail BOOLEAN NOT NULL DEFAULT FALSE;

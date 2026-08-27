@@ -8,6 +8,7 @@ import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import com.bjarne.videoservice.transcoding.VideoRenditionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -25,16 +26,19 @@ public class VideoManagementService {
     private final ReportRepository reportRepository;
     private final StoragePrefixMover storagePrefixMover;
     private final MediaUrlResolver urlResolver;
+    private final ThumbnailService thumbnailService;
 
     public VideoManagementService(VideoRepository videoRepository, CategoryRepository categoryRepository,
                                    VideoRenditionRepository videoRenditionRepository, ReportRepository reportRepository,
-                                   StoragePrefixMover storagePrefixMover, MediaUrlResolver urlResolver) {
+                                   StoragePrefixMover storagePrefixMover, MediaUrlResolver urlResolver,
+                                   ThumbnailService thumbnailService) {
         this.videoRepository = videoRepository;
         this.categoryRepository = categoryRepository;
         this.videoRenditionRepository = videoRenditionRepository;
         this.reportRepository = reportRepository;
         this.storagePrefixMover = storagePrefixMover;
         this.urlResolver = urlResolver;
+        this.thumbnailService = thumbnailService;
     }
 
     @Transactional
@@ -58,6 +62,20 @@ public class VideoManagementService {
         }
 
         videoRepository.save(video);
+        return VideoDetailDto.from(video, urlResolver);
+    }
+
+    @Transactional
+    public VideoDetailDto setThumbnail(UUID videoId, MultipartFile file) {
+        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        thumbnailService.store(video, file);
+        return VideoDetailDto.from(video, urlResolver);
+    }
+
+    @Transactional
+    public VideoDetailDto removeThumbnail(UUID videoId) {
+        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        thumbnailService.remove(video);
         return VideoDetailDto.from(video, urlResolver);
     }
 
