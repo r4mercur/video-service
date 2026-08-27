@@ -18,11 +18,20 @@
 		# Bucket name must match app.storage.bucket (application.properties).
 		rewrite * /{$STORAGE_BUCKET:video-service}{uri}
 
-		@segments path *.m4s *.mp4 *.jpg
+		# Renditions never change under an existing key: a re-transcode deletes the old
+		# rendition rows and writes a fresh job, it doesn't overwrite these files in place.
+		@segments path *.m4s *.mp4
 		header @segments Cache-Control "public, immutable, max-age=31536000"
 
-		# Shorter than the segments: a blocked/deleted playlist shouldn't keep being served
-		# from the browser cache for a whole year (DSA notice procedure, AP7).
+		# Thumbnails/sprite sheets DO change under the same key in place: the owner can
+		# replace thumbnail_custom.jpg any time (9.4), and a re-transcode regenerates
+		# thumbnail.jpg/sprite.jpg. A year-long immutable cache would make a browser that
+		# already fetched the old image never see the new one. Short cache instead, same as
+		# the playlists below (a blocked/deleted video shouldn't keep serving stale images
+		# from the browser cache either, DSA notice procedure, AP7).
+		@images path *.jpg
+		header @images Cache-Control "public, max-age=300"
+
 		@playlists path *.m3u8
 		header @playlists Cache-Control "public, max-age=300"
 

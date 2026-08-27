@@ -269,7 +269,7 @@ Orphaned sessions: `AbortMultipartUpload` after 24 h via a scheduled job.
 
 | Prefix | Delivery | Caching |
 |---|---|---|
-| `public/{videoId}/…` | Caddy → bucket, direct | `immutable, max-age=31536000` on segments |
+| `public/{videoId}/…` | Caddy → bucket, direct | `immutable, max-age=31536000` on segments (`.m4s`/`.mp4`, never rewritten under the same key); `max-age=300` on playlists and thumbnails/sprite sheets (`.jpg`, **not** immutable — these *can* change under the same key, see 9.4) |
 | `private/{videoId}/…` | Bucket not public. Backend generates the playlist at runtime with presigned segment URLs (TTL 3 h) | `no-store` |
 
 When visibility changes, the objects are moved between prefixes.
@@ -296,6 +296,10 @@ owner can replace it with their own image via `PUT /api/videos/{id}/thumbnail`.
   640px wide JPEG, mirroring the auto-thumbnail's own conventions) runs synchronously in the
   request instead of via the worker job queue — well under a second, unlike a multi-hour
   transcode.
+- ⚠️ Because `thumbnail.jpg`/`thumbnail_custom.jpg` can change **in place** under the same key
+  (unlike renditions), they must **not** get the year-long `immutable` cache from 9.3 — a browser
+  that already fetched the old image would otherwise never see a replacement. Caddy caches `.jpg`
+  short instead (9.3). Don't put thumbnails back under the `@segments` immutable matcher.
 
 ---
 
