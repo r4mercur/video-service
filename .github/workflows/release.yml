@@ -21,6 +21,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Belt-and-suspenders: the executable bit is fixed in the git index (`git update-index
+      # --chmod=+x gradlew`), but Windows checkouts have dropped it before and will again.
+      - run: chmod +x gradlew
+
       # FFmpeg's own binary, needed for the @Tag("ffmpeg") classes fastTest skips (FfmpegRunnerTest,
       # MediaProbeTest, TranscodeServiceIntegrationTest). CLAUDE.md §10 calls AP4 the riskiest
       # package - a tag about to be deployed gets the full suite, not just the fast gate.

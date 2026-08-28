@@ -21,6 +21,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Belt-and-suspenders: the executable bit is fixed in the git index (`git update-index
+      # --chmod=+x gradlew`), but Windows checkouts have dropped it before and will again.
+      - run: chmod +x gradlew
+
       # fastTest excludes the 3 @Tag("ffmpeg") classes (build.gradle) - no ffmpeg binary needed
       # on this runner, keeps PR feedback fast. The full suite runs as the release gate instead.
       - name: Run fast test suite
