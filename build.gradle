@@ -50,22 +50,33 @@ dependencies {
 
 // Without these overrides, a stuck HikariCP waits out the full default timeout (30s) again on
 // every single test before treating the connection as dead - with 9-10 tests per class, that
-// turns a single Testcontainers hiccup into a 5-minute hang. A short timeout is plenty for tests
-// (local test container, the connection should come up in milliseconds); a real hiccup should
-// then make the class fail in seconds instead of minutes. Doesn't apply to production (the
-// Spring default from application.properties stays unchanged there). Testcontainers Postgres
-// occasionally loses its connection briefly on this environment (Docker Desktop/WSL2 networking
-// symptom, cause deliberately not fixed - see the analysis). A test that fails once because of
-// that and then passes cleanly on retry isn't a real bug - maxFailures caps that to a single
-// outlier batch, so that a test that's actually broken (and fails on every retry too) still
-// reliably turns the build red. 40 was enough for the suite up to AP6 (~72 tests) (already saw
-// 20 failures in a single run); since AP7 (85 tests, several additional Testcontainers-heavy
-// classes) the cap wasn't enough anymore on a bad batch - a full run summed across all retries
-// was observed hitting up to ~55 failures before the plugin disables retry for the whole round
-// (exactly when it's needed most). 100 instead of 40, with headroom.
+// turns a single Testcontainers hiccup into a 5-minute hang. A short-ish timeout is plenty for
+// tests; a real hiccup should then make the class fail in seconds instead of minutes. Doesn't
+// apply to production (the Spring default from application.properties stays unchanged there).
+//
+// 3000ms turned out to be too tight, not just on a locally busy Docker Desktop/WSL2 host but on
+// GitHub Actions' own runners too (private-repo free-tier runners are 2 vCPU/7GB - a
+// @SpringBootTest-heavy suite plus a Testcontainers Postgres genuinely competing for CPU can miss
+// a 3s window under normal load, not just during an outage). Raised to 10000ms: still "seconds,
+// not minutes" if the connection is actually dead, but tolerant of realistic scheduling jitter.
+// maxParallelForks pinned to 1 for the same reason - the container is a single `static` field
+// shared across all subclasses of AbstractPostgresIntegrationTest *within one JVM*; more than one
+// parallel fork means more than one such container plus more than one full Spring context alive
+// at once, which is exactly the kind of resource contention that produced the 3s timeouts.
+// maxHeapSize bumped so GC pressure from many cached Spring contexts doesn't itself become a
+// source of the same stalls. A test that fails once because of a genuine remaining hiccup and
+// then passes cleanly on retry isn't a real bug - maxFailures caps that to a single outlier
+// batch, so a test that's actually broken (and fails on every retry too) still reliably turns the
+// build red. 40 was enough for the suite up to AP6 (~72 tests) (already saw 20 failures in a
+// single run); since AP7 (85 tests, several additional Testcontainers-heavy classes) the cap
+// wasn't enough anymore on a bad batch - a full run summed across all retries was observed
+// hitting up to ~55 failures before the plugin disables retry for the whole round (exactly when
+// it's needed most). 100 instead of 40, with headroom.
 tasks.withType(Test).configureEach {
-    systemProperty 'spring.datasource.hikari.connection-timeout', '3000'
-    systemProperty 'spring.datasource.hikari.validation-timeout', '3000'
+    systemProperty 'spring.datasource.hikari.connection-timeout', '10000'
+    systemProperty 'spring.datasource.hikari.validation-timeout', '10000'
+    maxParallelForks = 1
+    maxHeapSize = '2g'
     retry {
         maxRetries = 2
         maxFailures = 100
