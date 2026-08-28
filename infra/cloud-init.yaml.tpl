@@ -78,9 +78,16 @@ runcmd:
     fi
     chmod 755 /usr/local/bin/rrsync
 
-  # App directories - compose.prod.yaml/Caddyfile.prod/.env/secrets are populated by the first
-  # deploy (files) run and by hand (.env, secrets), not by cloud-init.
+  # App directories - compose.prod.yaml/Caddyfile.prod land here via the first "deploy files"
+  # run, .env and secrets/ are placed by hand (see infra/README.md), not by cloud-init.
   - mkdir -p /opt/video-service/secrets /opt/video-service/frontend-dist /opt/video-service/incoming/frontend
+  # deploy.sh runs as the unprivileged `deploy` user (no sudo) and needs to create/overwrite
+  # compose.prod.yaml, Caddyfile.prod and .env directly in this directory - it must own it, not
+  # just the subdirectories. The sticky bit (mode 1755) still stops deploy from deleting/renaming
+  # entries it doesn't own (secrets/, created next with different ownership), same protection
+  # /tmp gets - so owning the parent doesn't hand deploy control over root-owned secrets/.
+  - chown deploy:deploy /opt/video-service
+  - chmod 1755 /opt/video-service
   - chown -R deploy:deploy /opt/video-service/incoming /opt/video-service/frontend-dist
   - chmod 700 /opt/video-service/secrets
 

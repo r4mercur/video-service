@@ -36,6 +36,7 @@ out/
 ### VS Code ###
 .vscode/
 init.mp4
+temp
 
 ### Production secrets - never committed, only ever live on the server ###
 .env
