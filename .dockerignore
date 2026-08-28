@@ -1,0 +1,14 @@
+.git
+.github
+.gradle
+.idea
+.vscode
+build
+bin
+out
+*.iml
+*.md
+!README.md
+init.mp4
+.env
+*.pem

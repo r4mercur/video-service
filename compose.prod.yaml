@@ -1,0 +1,64 @@
+# Production compose file - lives in the repo, but only ever references the GHCR image,
+# never builds locally. Real secrets come from a server-local `.env` (see .env.example),
+# never committed (CLAUDE.md open-source rule §2.1 is about the object storage *provider*,
+# not about publishing credentials).
+#
+# Phase 0 (CLAUDE.md §3.1/§11): api + worker in one container. When load requires it, add a
+# second service from the SAME image with SPRING_PROFILES_ACTIVE=worker only - no second
+# project, no second image, e.g.:
+#
+#   worker:
+#     image: ghcr.io/r4mercur/video-service:${IMAGE_TAG:-latest}
+#     environment:
+#       - SPRING_PROFILES_ACTIVE=prod,worker
+#     env_file: .env
+#     volumes:
+#       - ./secrets:/secrets:ro
+#     depends_on:
+#       - postgres
+
+services:
+  app:
+    image: ghcr.io/r4mercur/video-service:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod,api,worker
+    env_file: .env
+    volumes:
+      # Persistent JWT signing key (see README) - generated once, outside git. Without this,
+      # SecurityConfig#rsaKey falls back to an ephemeral in-memory key and every restart
+      # invalidates every access token.
+      - ./secrets:/secrets:ro
+    depends_on:
+      - postgres
+    expose:
+      - '8080'
+
+  postgres:
+    image: 'postgres:17'
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - '5432'
+
+  caddy:
+    image: 'caddy:2'
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    env_file: .env
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - ./frontend-dist:/srv/frontend:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

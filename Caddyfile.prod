@@ -1,0 +1,29 @@
+# Production Caddyfile. Unlike the dev Caddyfile, this is NOT in the media data path (§9.3
+# finalized that decision) - segments/playlists/thumbnails are fetched by the browser directly
+# from Hetzner Object Storage. Caddy here does TLS, the API reverse proxy, and serves the built
+# Angular bundle (frontend-dist/, synced there by the frontend repo's release workflow).
+#
+# {$DOMAIN} is set via .env on the server (see infra/README.md) - once it's set, automatic TLS
+# just works, no file edit needed. Same placeholder pattern as {$STORAGE_BUCKET} in ./Caddyfile.
+
+{$DOMAIN} {
+	@api path /api/*
+	handle @api {
+		reverse_proxy app:8080
+	}
+
+	handle {
+		root * /srv/frontend
+		encode gzip
+
+		# Frontend CSP (§9.3 / frontend AP9): segments/thumbnails/playlists are fetched directly
+		# from the object storage origin, not this one - connect-src/media-src must allow it or
+		# playback silently breaks. {$STORAGE_PUBLIC_ORIGIN} is set alongside {$DOMAIN} in .env.
+		header {
+			Content-Security-Policy "default-src 'self'; media-src 'self' {$STORAGE_PUBLIC_ORIGIN}; connect-src 'self' {$STORAGE_PUBLIC_ORIGIN}; img-src 'self' {$STORAGE_PUBLIC_ORIGIN} data:; style-src 'self' 'unsafe-inline'"
+		}
+
+		try_files {path} /index.html
+		file_server
+	}
+}

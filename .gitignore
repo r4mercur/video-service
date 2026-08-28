@@ -36,3 +36,16 @@ out/
 ### VS Code ###
 .vscode/
 init.mp4
+
+### Production secrets - never committed, only ever live on the server ###
+.env
+*.pem
+
+### Terraform (infra/) - state and local provider cache are machine/run-specific, *.tfvars can
+### hold the admin/deploy public keys inline if someone uses one instead of -var flags ###
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/*.tfvars.json
+infra/crash.log

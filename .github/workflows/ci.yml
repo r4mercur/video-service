@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  fast-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # fastTest excludes the 3 @Tag("ffmpeg") classes (build.gradle) - no ffmpeg binary needed
+      # on this runner, keeps PR feedback fast. The full suite runs as the release gate instead.
+      - name: Run fast test suite
+        run: ./gradlew fastTest --no-daemon
