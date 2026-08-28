@@ -49,7 +49,7 @@ class FfmpegRunnerTest {
                         "-i", "testsrc=duration=30:size=640x480:rate=25", "-c:v", "libx264", "-f", "null", "-"),
                 Duration.ofMillis(300)))
                 .isInstanceOf(TranscodeProcessException.class)
-                .hasMessageContaining("Timeout");
+                .hasMessageContaining("timed out");
 
         long elapsed = System.currentTimeMillis() - start;
         assertThat(elapsed).isLessThan(10_000);

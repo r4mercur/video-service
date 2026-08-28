@@ -1,10 +1,6 @@
 package com.bjarne.videoservice.transcoding;
 
-import com.bjarne.videoservice.catalog.Category;
-import com.bjarne.videoservice.catalog.CategoryRepository;
-import com.bjarne.videoservice.catalog.Video;
-import com.bjarne.videoservice.catalog.VideoRepository;
-import com.bjarne.videoservice.catalog.Visibility;
+import com.bjarne.videoservice.catalog.*;
 import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
 import com.bjarne.videoservice.identity.User;
@@ -117,7 +113,7 @@ class TranscodeServiceIntegrationTest extends AbstractS3IntegrationTest {
 
         TranscodeJob reloaded = transcodeJobRepository.findById(job.getId()).orElseThrow();
         assertThat(reloaded.getProgressPercent()).isEqualTo(100);
-        assertThat(reloaded.getCurrentStep()).isEqualTo("Fertig");
+        assertThat(reloaded.getCurrentStep()).isEqualTo("Done");
     }
 
     private void uploadSource(Video video, Path clip) {

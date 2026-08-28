@@ -54,29 +54,37 @@ dependencies {
 // tests; a real hiccup should then make the class fail in seconds instead of minutes. Doesn't
 // apply to production (the Spring default from application.properties stays unchanged there).
 //
-// 3000ms turned out to be too tight, not just on a locally busy Docker Desktop/WSL2 host but on
-// GitHub Actions' own runners too (private-repo free-tier runners are 2 vCPU/7GB - a
-// @SpringBootTest-heavy suite plus a Testcontainers Postgres genuinely competing for CPU can miss
-// a 3s window under normal load, not just during an outage). Raised to 10000ms: still "seconds,
-// not minutes" if the connection is actually dead, but tolerant of realistic scheduling jitter.
-// maxParallelForks pinned to 1 for the same reason - the container is a single `static` field
-// shared across all subclasses of AbstractPostgresIntegrationTest *within one JVM*; more than one
-// parallel fork means more than one such container plus more than one full Spring context alive
-// at once, which is exactly the kind of resource contention that produced the 3s timeouts.
-// maxHeapSize bumped so GC pressure from many cached Spring contexts doesn't itself become a
-// source of the same stalls. A test that fails once because of a genuine remaining hiccup and
-// then passes cleanly on retry isn't a real bug - maxFailures caps that to a single outlier
-// batch, so a test that's actually broken (and fails on every retry too) still reliably turns the
-// build red. 40 was enough for the suite up to AP6 (~72 tests) (already saw 20 failures in a
-// single run); since AP7 (85 tests, several additional Testcontainers-heavy classes) the cap
-// wasn't enough anymore on a bad batch - a full run summed across all retries was observed
-// hitting up to ~55 failures before the plugin disables retry for the whole round (exactly when
-// it's needed most). 100 instead of 40, with headroom.
+// Root cause, found 2026-08-28 (see AbstractPostgresIntegrationTest/AbstractS3IntegrationTest for
+// the actual fix): the "Connection refused" failures were never about Docker Desktop/WSL2
+// networking, OOM, or Ryuk - `--info` logging of a full suite run showed a FRESH Postgres/MinIO
+// container being created and started before almost every single test class. The container field
+// is `static` on the abstract base specifically to be a JVM-wide singleton shared by every
+// subclass, but it was previously annotated `@Container` under `@Testcontainers` - and that
+// extension manages lifecycle PER TEST CLASS: each subclass's own beforeAll/afterAll called
+// start()/stop() on the SAME shared field, so class A finishing its tests would stop the
+// container out from under whichever class ran next, which then started its own replacement, and
+// so on - dozens of containers churning through one suite run instead of a single shared
+// instance, until Docker or the JVM ran out of room (which is what actually produced the
+// SIGKILLs and "Connection refused" errors observed along the way). Fixed by switching both
+// containers to a plain `static { ... .start(); }` initializer instead of `@Container` - a
+// documented Testcontainers pattern for exactly this "shared across sibling subclasses via an
+// abstract base" case. maxParallelForks and the Hikari timeout below are unrelated, orthogonal
+// hardening kept from that investigation, not fixes for this bug:
+// maxParallelForks=1 avoids two forks each running their own full container set at once on a
+// resource-constrained CI runner; the 10000ms Hikari timeout (raised from 3000ms) is general
+// tolerance for scheduling jitter on the database connection itself.
+// A test that fails once because of a genuine remaining hiccup and then passes cleanly on retry
+// isn't a real bug - maxFailures caps that to a single outlier batch, so a test that's actually
+// broken (and fails on every retry too) still reliably turns the build red. 40 was enough for the
+// suite up to AP6 (~72 tests) (already saw 20 failures in a single run); since AP7 (85 tests,
+// several additional Testcontainers-heavy classes) the cap wasn't enough anymore on a bad batch -
+// a full run summed across all retries was observed hitting up to ~55 failures before the plugin
+// disables retry for the whole round (exactly when it's needed most). 100 instead of 40, with
+// headroom.
 tasks.withType(Test).configureEach {
     systemProperty 'spring.datasource.hikari.connection-timeout', '10000'
     systemProperty 'spring.datasource.hikari.validation-timeout', '10000'
     maxParallelForks = 1
-    maxHeapSize = '2g'
     retry {
         maxRetries = 2
         maxFailures = 100
