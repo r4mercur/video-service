@@ -10,14 +10,18 @@
 		reverse_proxy host.docker.internal:8080
 	}
 
-	# Public HLS renditions/thumbnails/sprite sheets: Caddy passes these through to the bucket
-	# anonymously (see S3BucketInitializer#ensureBucketPublicReadPolicy for the required policy).
-	# "private/" does NOT go through here - the backend generates presigned URLs for that.
+	# Public HLS renditions/thumbnails/sprite sheets: Caddy passes these through to storage
+	# anonymously. "private/" does NOT go through here - the backend generates presigned URLs
+	# for that.
+	#
+	# Garage has no S3 bucket-policy API (PutBucketPolicy always 501s, verified against
+	# v1.0.1 - see garage/garage.toml and S3BucketInitializer#ensureBucketPublicReadPolicy).
+	# Anonymous reads only work through its separate website endpoint (s3_web, port 3902),
+	# which is vhost-routed by Host header with NO bucket segment in the request path -
+	# unlike the plain path-style S3 endpoint MinIO used to serve this from. The garage-init
+	# bootstrap (compose.yaml) enables website access for the bucket named below.
 	@publicAssets path /public/*
 	handle @publicAssets {
-		# Bucket name must match app.storage.bucket (application.properties).
-		rewrite * /{$STORAGE_BUCKET:video-service}{uri}
-
 		# Renditions never change under an existing key: a re-transcode deletes the old
 		# rendition rows and writes a fresh job, it doesn't overwrite these files in place.
 		@segments path *.m4s *.mp4
@@ -35,7 +39,11 @@
 		@playlists path *.m3u8
 		header @playlists Cache-Control "public, max-age=300"
 
-		reverse_proxy minio:9000
+		reverse_proxy garage:3902 {
+			# Bucket name must match app.storage.bucket (application.properties) and
+			# garage.toml's [s3_web] root_domain suffix.
+			header_up Host {$STORAGE_BUCKET:video-service}.web.garage.localhost
+		}
 	}
 
 	# "private/*" and everything else deliberately ends up here, not at the bucket - private

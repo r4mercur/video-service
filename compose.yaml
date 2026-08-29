@@ -7,19 +7,37 @@ services:
       - 'POSTGRES_USER=myuser'
     ports:
       - '5432:5432'
-  minio:
-    image: 'minio/minio:latest'
-    command: 'server /data --console-address ":9002"'
+  garage:
+    image: 'dxflrs/garage:v1.0.1'
     environment:
-      - 'MINIO_ROOT_USER=videoservice'
-      - 'MINIO_ROOT_PASSWORD=videoservice-dev'
-      # MinIO does not support the S3 CORS API (PutBucketCors) - CORS must be set server-side.
-      - 'MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:4200'
-    ports:
-      - '9000:9000'
-      - '9002:9002'
+      # Config-mounted secrets end up world-readable via a bind mount on Windows/WSL2 -
+      # they only ever authenticate local container-to-container traffic, so that's fine.
+      - 'GARAGE_ALLOW_WORLD_READABLE_SECRETS=true'
     volumes:
-      - 'minio-data:/data'
+      - './garage/garage.toml:/etc/garage.toml'
+      - 'garage-meta:/data/meta'
+      - 'garage-data:/data/data'
+    ports:
+      - '3900:3900' # S3 API
+      - '3902:3902' # Website (public, anonymous reads - see garage.toml [s3_web])
+      - '3903:3903' # Admin API, used only by garage-init below
+
+  # One-shot bootstrap: creates the single-node layout, imports a fixed dev access key and
+  # creates+configures the bucket. Runs once against garage's admin API and exits; safe to
+  # run again on every `compose up` (see garage/init.sh for the idempotency reasoning).
+  garage-init:
+    image: 'curlimages/curl:8.11.0'
+    depends_on:
+      - garage
+    entrypoint: ['sh', '/init.sh']
+    environment:
+      - 'GARAGE_ADMIN_TOKEN=613174e6b1f70bd7b5ab95301dac8443b5a05db090531ebf1b2913d4fda74adf'
+      - 'GARAGE_BOOTSTRAP_KEY_ID=GK001122334455667788990011'
+      - 'GARAGE_BOOTSTRAP_KEY_SECRET=662c72327c27df3e03bbc9602abb627f6179e8c968350dfc578442cf398b1ff2'
+      - 'GARAGE_BOOTSTRAP_BUCKET=video-service'
+    volumes:
+      - './garage/init.sh:/init.sh'
+
   caddy:
     image: 'caddy:2'
     ports:
@@ -31,7 +49,31 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:
-      - minio
+      garage-init:
+        condition: service_completed_successfully
+
+  prometheus:
+    image: 'prom/prometheus:latest'
+    ports:
+      - '9090:9090'
+    volumes:
+      - './prometheus/prometheus.yml:/etc/prometheus/prometheus.yml'
+      - 'prometheus-data:/prometheus'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  grafana:
+    image: 'grafana/grafana:latest'
+    ports:
+      - '3000:3000'
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
 
 volumes:
-  minio-data:
+  garage-meta:
+  garage-data:
+  grafana-data:
+  prometheus-data:

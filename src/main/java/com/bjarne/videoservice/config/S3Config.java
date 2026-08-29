@@ -22,6 +22,13 @@ public class S3Config {
                 .credentialsProvider(credentialsProvider(properties))
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(properties.pathStyleAccess())
+                        // The SDK defaults to chunked/streaming SigV4 payloads (a request
+                        // signed with "x-amz-content-sha256: STREAMING-UNSIGNED-PAYLOAD-..."
+                        // instead of a plain hash). Garage v1.0.1 rejects that outright
+                        // ("Invalid content sha256 hash", verified directly) - only classic
+                        // single-shot signed payloads work. MinIO tolerated the default;
+                        // Garage doesn't, so this isn't optional.
+                        .chunkedEncodingEnabled(false)
                         .build())
                 .build();
     }
@@ -34,6 +41,13 @@ public class S3Config {
                 .credentialsProvider(credentialsProvider(properties))
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(properties.pathStyleAccess())
+                        // The SDK defaults to chunked/streaming SigV4 payloads (a request
+                        // signed with "x-amz-content-sha256: STREAMING-UNSIGNED-PAYLOAD-..."
+                        // instead of a plain hash). Garage v1.0.1 rejects that outright
+                        // ("Invalid content sha256 hash", verified directly) - only classic
+                        // single-shot signed payloads work. MinIO tolerated the default;
+                        // Garage doesn't, so this isn't optional.
+                        .chunkedEncodingEnabled(false)
                         .build())
                 .build();
     }

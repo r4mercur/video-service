@@ -1,0 +1,39 @@
+# Local dev config for a single-node Garage cluster (CLAUDE.md 4/9.1: dev and test are
+# standardized on Garage so the storage code path matches production, not MinIO).
+#
+# Secrets below are dev-only placeholders, fine to commit - they only ever authenticate
+# requests between containers on the local compose network.
+
+metadata_dir = "/data/meta"
+data_dir = "/data/data"
+db_engine = "sqlite"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "904dd85356d2f0979170c52f2877a988842da55d85ff8d4f2399dbeca7f657f7"
+
+[s3_api]
+# Must match app.storage.region (application.properties) and AbstractS3IntegrationTest exactly -
+# Garage rejects a request signed with any other region string (AuthorizationHeaderMalformed),
+# unlike MinIO/AWS which tolerate a mismatched region for a single-region setup.
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+# Garage has no S3 bucket-policy API (PutBucketPolicy always returns 501 Not Implemented -
+# verified directly against v1.0.1, not just "not yet wired up here"). Anonymous public reads
+# only work through this separate "website" endpoint, vhost-routed by Host header with no
+# bucket segment in the path - see the Caddyfile's @publicAssets block and the garage-init
+# bootstrap below (`garage bucket website --allow`). Hetzner Object Storage in production
+# supports real prefix-scoped bucket policies, so this divergence is dev-only.
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "613174e6b1f70bd7b5ab95301dac8443b5a05db090531ebf1b2913d4fda74adf"
+metrics_token = "15ab3b476bd569488b6ee7a4db5b1f9cd90d72e521c101413ad1fee7f42b5761"

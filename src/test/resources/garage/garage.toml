@@ -1,0 +1,23 @@
+# Garage config for AbstractS3IntegrationTest's GenericContainer. Dev-only secrets, fine to
+# commit (see compose.yaml's garage/garage.toml for the same reasoning).
+
+metadata_dir = "/data/meta"
+data_dir = "/data/data"
+db_engine = "sqlite"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "a538af61a5c9a5e0bf1ffc24b88da1c04f6846bf6386e97178b0b562c59c959f"
+
+[s3_api]
+# Must match app.storage.region in AbstractS3IntegrationTest's @DynamicPropertySource exactly -
+# Garage rejects a request signed with any other region string (AuthorizationHeaderMalformed).
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "b38b9abe2c682063951276fa0d2da8048b1b93cabe622fe45936287f296dbffa"
