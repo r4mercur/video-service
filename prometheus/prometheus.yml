@@ -9,6 +9,6 @@ scrape_configs:
   # The video-service app runs on the host (docker-compose only holds infra), so it's
   # reached the same way Caddy reaches it (see Caddyfile) - via host.docker.internal.
   - job_name: video-service
-    metrics_path: /actuator/prometheus
+    metrics_path: /api/actuator/prometheus
     static_configs:
       - targets: ['host.docker.internal:8080']

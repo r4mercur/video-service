@@ -65,18 +65,12 @@ runcmd:
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
   - usermod -aG docker deploy
 
-  # rrsync confines the deploy key's rsync transfers to /opt/video-service/incoming - ships
-  # gzipped or plain depending on distro/rsync version, so try both known locations.
-  - |
-    set -e
-    RRSYNC_GZ=$(find /usr/share -iname 'rrsync.gz' 2>/dev/null | head -n1)
-    if [ -n "$RRSYNC_GZ" ]; then
-      gunzip -c "$RRSYNC_GZ" > /usr/local/bin/rrsync
-    else
-      RRSYNC_PLAIN=$(find /usr/share -iname 'rrsync' -type f 2>/dev/null | head -n1)
-      cp "$RRSYNC_PLAIN" /usr/local/bin/rrsync
-    fi
-    chmod 755 /usr/local/bin/rrsync
+  # rrsync confines the deploy key's rsync transfers to /opt/video-service/incoming. The rsync
+  # package ships it as a ready-to-use executable at /usr/bin/rrsync on Ubuntu 24.04 (confirmed
+  # via `dpkg -L rsync` on 2026-08-30 - no .gz, no separate extraction step needed, unlike older
+  # distro versions this was originally written against). deploy.sh calls the /usr/local/bin path,
+  # so symlink it there rather than changing deploy.sh's reference.
+  - ln -sf /usr/bin/rrsync /usr/local/bin/rrsync
 
   # App directories - compose.prod.yaml/Caddyfile.prod land here via the first "deploy files"
   # run, .env and secrets/ are placed by hand (see infra/README.md), not by cloud-init.
@@ -89,7 +83,14 @@ runcmd:
   - chown deploy:deploy /opt/video-service
   - chmod 1755 /opt/video-service
   - chown -R deploy:deploy /opt/video-service/incoming /opt/video-service/frontend-dist
-  - chmod 700 /opt/video-service/secrets
+  # 755, not 700: the app container reads jwt-*.pem as its own internal non-root user (world-
+  # readable 644, see infra/README.md) - but a 700 directory blocks traversal into it for every
+  # UID except root regardless of the files' own permissions, which broke the very first real
+  # deploy (found 2026-08-30: SecurityConfig failed with "Permission denied" reading
+  # /secrets/jwt-public.pem even though the file itself was 644). Individual files that must stay
+  # host-only (storagebox_ed25519, restic-password) keep their own 600 - a listable directory only
+  # reveals filenames, not their contents.
+  - chmod 755 /opt/video-service/secrets
 
   # SSH hardening - deliberately last, so a failure in an earlier step still leaves root
   # reachable (via the admin key, which Hetzner already put into root's authorized_keys) to fix
