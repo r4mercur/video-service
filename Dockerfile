@@ -28,4 +28,10 @@ RUN chown appuser:appuser app.jar
 USER appuser
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+# preferIPv4Stack: the default Docker bridge network gives containers no outbound IPv6 route.
+# S3-compatible endpoints (Hetzner Object Storage, GHCR, etc.) are commonly dual-stack, and the
+# JVM's resolver tends to prefer AAAA records - without this, every attempt to reach one fails
+# immediately with "Network is unreachable" (found 2026-08-30: S3BucketInitializer's first bucket
+# call). Caddy (Go) doesn't hit this because Go's resolver behaves differently, which is why only
+# app, not caddy, showed the symptom.
+ENTRYPOINT ["java", "-Djava.net.preferIPv4Stack=true", "-jar", "/app/app.jar"]
