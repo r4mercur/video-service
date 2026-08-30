@@ -58,6 +58,10 @@ public class VideoManagementService {
             video.setCategory(category);
         }
         if (request.visibility() != null && request.visibility() != video.getVisibility()) {
+            if (request.visibility() == Visibility.PUBLIC
+                    && reportRepository.existsByVideoIdAndStatus(videoId, ReportStatus.OPEN)) {
+                throw new ConflictException("Video cannot be made public while a report is open");
+            }
             changeVisibility(video, request.visibility());
         }
 
