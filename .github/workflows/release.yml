@@ -72,8 +72,6 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          wc -l ~/.ssh/deploy_key
-          ssh-keygen -y -f ~/.ssh/deploy_key || echo "KEY PARSE FAILED ON RUNNER"
           ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" >> ~/.ssh/known_hosts
 
       # HETZNER_SSH_KEY is the "deploy" user's key. That user has no shell at all (forced

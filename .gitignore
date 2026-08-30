@@ -42,6 +42,11 @@ temp
 .env
 *.pem
 
+### CI deploy keypair (infra/) - private half is the HETZNER_SSH_KEY GitHub secret; the local
+### copy is kept only for manual debugging/re-provisioning, never for git ###
+infra/deploy_key
+infra/deploy_key.pub
+
 ### Terraform (infra/) - state and local provider cache are machine/run-specific, *.tfvars can
 ### hold the admin/deploy public keys inline if someone uses one instead of -var flags ###
 infra/.terraform/
