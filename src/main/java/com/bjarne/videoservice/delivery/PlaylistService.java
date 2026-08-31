@@ -26,19 +26,24 @@ public class PlaylistService {
     private final PlaylistObjectStore objectStore;
     private final PlaylistRewriter rewriter;
     private final ObjectPresigner presigner;
+    private final MediaUrlResolver urlResolver;
 
     public PlaylistService(VideoRepository videoRepository, PlaylistObjectStore objectStore,
-                            PlaylistRewriter rewriter, ObjectPresigner presigner) {
+                            PlaylistRewriter rewriter, ObjectPresigner presigner, MediaUrlResolver urlResolver) {
         this.videoRepository = videoRepository;
         this.objectStore = objectStore;
         this.rewriter = rewriter;
         this.presigner = presigner;
+        this.urlResolver = urlResolver;
     }
 
     public ManifestResponse manifest(UUID videoId, UUID viewerUserId) {
         Video video = requireReadyAndAccessible(videoId, viewerUserId);
+        // PRIVATE deliberately does NOT go through urlResolver here: the browser fetches the
+        // master playlist from this backend (masterPlaylist() below), not straight from storage,
+        // so the segment/rendition URLs inside it can be presigned per request.
         String playlistUrl = video.getVisibility() == Visibility.PUBLIC
-                ? "/" + video.getStoragePrefix() + "/master.m3u8"
+                ? urlResolver.resolve(Visibility.PUBLIC, video.getStoragePrefix() + "/master.m3u8")
                 : "/api/videos/" + video.getId() + "/master.m3u8";
         return new ManifestResponse(playlistUrl);
     }

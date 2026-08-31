@@ -42,7 +42,8 @@ class StoragePrefixMoverTest {
     private S3BucketInitializer bucketInitializer;
 
     private final S3Properties properties =
-            new S3Properties("http://localhost:9000", "us-east-1", BUCKET, "key", "secret", true, List.of());
+            new S3Properties("http://localhost:9000", "us-east-1", BUCKET, "key", "secret", true, List.of(),
+                    "http://localhost:9000");
 
     @Test
     void deleteAllThrowsWhenObjectsRemainAfterDelete() {

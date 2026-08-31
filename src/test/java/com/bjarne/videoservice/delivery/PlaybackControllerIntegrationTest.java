@@ -87,13 +87,14 @@ class PlaybackControllerIntegrationTest extends AbstractS3IntegrationTest {
     private String currentUsername;
 
     @Test
-    void manifestForPublicReadyVideoReturnsStaticCaddyPath() throws Exception {
+    void manifestForPublicReadyVideoReturnsAbsoluteObjectStorageUrl() throws Exception {
         User owner = saveUser();
         Video video = seedReadyVideo(owner, Visibility.PUBLIC);
 
         mockMvc.perform(get("/api/videos/" + video.getId() + "/manifest"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.playlistUrl").value("/" + video.getStoragePrefix() + "/master.m3u8"));
+                .andExpect(jsonPath("$.playlistUrl")
+                        .value(s3Properties.publicBaseUrl() + "/" + video.getStoragePrefix() + "/master.m3u8"));
     }
 
     @Test
