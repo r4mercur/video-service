@@ -23,12 +23,16 @@ import static org.mockito.Mockito.*;
  * delete actually left objects behind - the DB record was gone, the S3 objects stayed forever
  * orphaned. deleteAll(String) now re-lists the prefix after deleting and throws if it isn't
  * actually empty, so the transaction rolls back instead of silently losing the storage
- * reference.
+ * reference. move() (used for visibility changes, CLAUDE.md 9.5) had the same gap in its
+ * old-prefix cleanup and now goes through the same verified deleteAll(String) instead of the
+ * unverified deleteAll(List) it used to call directly.
  */
 @ExtendWith(MockitoExtension.class)
 class StoragePrefixMoverTest {
 
     private static final String PREFIX = "public/5c4edc5e-e24e-4917-85a5-276cb038f4fb";
+    private static final String OLD_PREFIX = "private/5c4edc5e-e24e-4917-85a5-276cb038f4fb";
+    private static final String NEW_PREFIX = "public/5c4edc5e-e24e-4917-85a5-276cb038f4fb";
     private static final String BUCKET = "video-service-test";
 
     @Mock
@@ -88,6 +92,60 @@ class StoragePrefixMoverTest {
         assertThatCode(() -> mover.deleteAll(PREFIX)).doesNotThrowAnyException();
 
         verify(s3Client, times(0)).deleteObjects(any(DeleteObjectsRequest.class));
+    }
+
+    @Test
+    void moveIsANoOpWhenOldAndNewPrefixAreEqual() {
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+
+        mover.move(OLD_PREFIX, OLD_PREFIX);
+
+        verifyNoInteractions(s3Client, bucketInitializer);
+    }
+
+    @Test
+    void moveCopiesThenDeletesAndVerifiesOldPrefixIsActuallyEmpty() {
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        String oldKey = OLD_PREFIX + "/360p/segment_000.m4s";
+
+        // 1st call: listKeys(oldPrefix) in move() itself, to drive the copy loop.
+        // 2nd call: listKeys(oldPrefix) inside deleteAll(oldPrefix), before deleting.
+        // 3rd call: deleteAll's own re-list, confirming the old prefix is now really empty.
+        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenReturn(listResponseWith(oldKey), listResponseWith(oldKey), listResponseWith());
+        when(s3Client.copyObject(any(CopyObjectRequest.class)))
+                .thenReturn(CopyObjectResponse.builder().build());
+        when(s3Client.deleteObjects(any(DeleteObjectsRequest.class)))
+                .thenReturn(DeleteObjectsResponse.builder().build());
+
+        assertThatCode(() -> mover.move(OLD_PREFIX, NEW_PREFIX)).doesNotThrowAnyException();
+
+        verify(s3Client).copyObject(CopyObjectRequest.builder()
+                .sourceBucket(BUCKET).sourceKey(oldKey)
+                .destinationBucket(BUCKET).destinationKey(NEW_PREFIX + "/360p/segment_000.m4s")
+                .build());
+        verify(s3Client, times(1)).deleteObjects(any(DeleteObjectsRequest.class));
+    }
+
+    @Test
+    void moveThrowsWhenOldPrefixStillHasObjectsAfterCopyAndDelete() {
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        String oldKey = OLD_PREFIX + "/360p/segment_000.m4s";
+
+        // Every listing, including deleteAll's post-delete verification, still finds the
+        // object - the copy succeeded, but the old prefix was never actually cleared.
+        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(listResponseWith(oldKey));
+        when(s3Client.copyObject(any(CopyObjectRequest.class)))
+                .thenReturn(CopyObjectResponse.builder().build());
+        when(s3Client.deleteObjects(any(DeleteObjectsRequest.class)))
+                .thenReturn(DeleteObjectsResponse.builder().build());
+
+        assertThatIllegalStateException()
+                .isThrownBy(() -> mover.move(OLD_PREFIX, NEW_PREFIX))
+                .withMessageContaining(OLD_PREFIX);
+
+        // The copy must have gone through regardless - only the cleanup verification failed.
+        verify(s3Client, times(1)).copyObject(any(CopyObjectRequest.class));
     }
 
     private static ListObjectsV2Response listResponseWith(String... keys) {

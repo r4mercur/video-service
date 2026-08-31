@@ -47,7 +47,10 @@ public class StoragePrefixMover {
                     .destinationBucket(properties.bucket()).destinationKey(newKey)
                     .build());
         }
-        deleteAll(oldKeys);
+        // Re-lists oldPrefix from scratch rather than reusing oldKeys, so deleteAll's own
+        // verification catches drift between the copy loop above and what's actually in the
+        // bucket now - not just whatever the pre-copy listing happened to see.
+        deleteAll(oldPrefix);
     }
 
     public void deleteAll(String prefix) {
