@@ -53,6 +53,13 @@ public class StoragePrefixMover {
     public void deleteAll(String prefix) {
         bucketInitializer.ensureReady();
         deleteAll(listKeys(prefix));
+
+        List<String> remaining = listKeys(prefix);
+        if (!remaining.isEmpty()) {
+            throw new IllegalStateException(
+                    "Storage cleanup incomplete for prefix '%s': %d object(s) still present after delete"
+                            .formatted(prefix, remaining.size()));
+        }
     }
 
     private void deleteAll(List<String> keys) {
