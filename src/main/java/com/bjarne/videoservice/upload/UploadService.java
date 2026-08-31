@@ -1,11 +1,6 @@
 package com.bjarne.videoservice.upload;
 
-import com.bjarne.videoservice.catalog.Category;
-import com.bjarne.videoservice.catalog.CategoryRepository;
-import com.bjarne.videoservice.catalog.Video;
-import com.bjarne.videoservice.catalog.VideoRepository;
-import com.bjarne.videoservice.catalog.VideoStatus;
-import com.bjarne.videoservice.catalog.Visibility;
+import com.bjarne.videoservice.catalog.*;
 import com.bjarne.videoservice.config.UploadProperties;
 import com.bjarne.videoservice.identity.UserRepository;
 import com.bjarne.videoservice.shared.exceptions.ConflictException;
@@ -19,11 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URL;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class UploadService {
@@ -72,7 +63,10 @@ public class UploadService {
         video.setStoragePrefix(storagePrefix);
         videoRepository.save(video);
 
-        String s3Key = storagePrefix + "/source" + extractExtension(request.filename());
+        // Deliberately NOT under storagePrefix (public/{id} or private/{id}): the source is
+        // never served, never public, and needs its own lifecycle (30-day retention cleanup,
+        // SourceRetentionCleanupJob) independent of the renditions living in that prefix.
+        String s3Key = "source/" + video.getId() + "/source" + extractExtension(request.filename());
         String uploadId = s3MultipartClient.createMultipartUpload(s3Key, request.contentType());
 
         int partCount = (int) Math.ceilDiv(request.sizeBytes(), properties.partSizeBytes());

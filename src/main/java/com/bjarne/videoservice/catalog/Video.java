@@ -68,6 +68,9 @@ public class Video {
     @Column(name = "source_key")
     private String sourceKey;
 
+    @Column(name = "source_deleted_at")
+    private Instant sourceDeletedAt;
+
     @Column(name = "sprite_sheet_key")
     private String spriteSheetKey;
 
@@ -215,6 +218,14 @@ public class Video {
 
     public void setSourceKey(String sourceKey) {
         this.sourceKey = sourceKey;
+    }
+
+    public Instant getSourceDeletedAt() {
+        return sourceDeletedAt;
+    }
+
+    public void setSourceDeletedAt(Instant sourceDeletedAt) {
+        this.sourceDeletedAt = sourceDeletedAt;
     }
 
     public String getSpriteSheetKey() {

@@ -79,11 +79,20 @@ public class AuthController {
         return authService.getCurrentUser(UUID.fromString(jwt.getSubject()));
     }
 
+    /**
+     * Lax, not Strict: Strict drops the cookie on the very first request of any cross-site
+     * navigation into the app (an external link, some tab-restore cases), which made exactly
+     * that page load's silent session restore (AuthService#restoreSession) fail and look like a
+     * forced logout even though the refresh token was still perfectly valid. Lax still omits the
+     * cookie on cross-site subrequests (images, iframes) and this endpoint is POST-only with its
+     * own CSRF token check on top, so the CSRF exposure Strict additionally guards against here
+     * is already covered. Found 2026-08-31 investigating reports of frequent unexpected logouts.
+     */
     private ResponseCookie refreshCookie(String value, Duration maxAge) {
         return ResponseCookie.from(REFRESH_COOKIE_NAME, value)
                 .httpOnly(true)
                 .secure(true)
-                .sameSite("Strict")
+                .sameSite("Lax")
                 .path(REFRESH_COOKIE_PATH)
                 .maxAge(maxAge)
                 .build();

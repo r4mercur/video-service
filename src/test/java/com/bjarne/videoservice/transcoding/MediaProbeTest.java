@@ -23,7 +23,7 @@ class MediaProbeTest {
     private final FfmpegRunner ffmpegRunner = new FfmpegRunner();
     private final TranscodeProperties properties = new TranscodeProperties("ffmpeg", "ffprobe", null,
             Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofHours(2),
-            List.of(Duration.ofMinutes(1)), List.of(360, 720, 1080), 10, 10, 160, 90);
+            List.of(Duration.ofMinutes(1)), List.of(360, 720, 1080), Duration.ofDays(30), 10, 10, 160, 90);
     private final MediaProbe mediaProbe = new MediaProbe(ffmpegRunner, properties, new ObjectMapper());
 
     @BeforeAll

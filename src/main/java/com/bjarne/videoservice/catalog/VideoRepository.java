@@ -16,6 +16,8 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     Optional<Video> findBySlug(String slug);
 
+    List<Video> findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBefore(Instant cutoff);
+
     /*
      * cursorTs/cursorId are never null (CatalogService passes an "infinitely far in the future"
      * sentinel when there's no cursor) - a ":cursorTs IS NULL OR ..." branch would prevent

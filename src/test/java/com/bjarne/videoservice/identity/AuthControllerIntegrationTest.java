@@ -81,7 +81,7 @@ class AuthControllerIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(setCookie).contains("refresh_token=")
                 .contains("HttpOnly")
                 .contains("Secure")
-                .contains("SameSite=Strict")
+                .contains("SameSite=Lax")
                 .contains("Path=/api/auth");
     }
 

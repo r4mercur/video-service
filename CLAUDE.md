@@ -258,7 +258,7 @@ New columns and their reasons:
 | Password | Argon2id |
 | Access token | JWT, 15 min, self-signed (RSA/EC via Nimbus), validated via resource server |
 | Access token storage | Angular memory, **not** `localStorage` (XSS) |
-| Refresh token | `HttpOnly` + `Secure` + `SameSite=Strict` cookie, 30 days |
+| Refresh token | `HttpOnly` + `Secure` + `SameSite=Lax` cookie, 30 days |
 | Rotation | On every refresh, old token is replaced |
 | Reuse detection | An already-replaced token is presented → the entire token family is revoked |
 | Session | Stateless, CSRF protection only on the cookie-based refresh path |

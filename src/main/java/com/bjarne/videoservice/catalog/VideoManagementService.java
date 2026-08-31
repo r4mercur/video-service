@@ -92,6 +92,13 @@ public class VideoManagementService {
         if (video.getStoragePrefix() != null) {
             storagePrefixMover.deleteAll(video.getStoragePrefix());
         }
+        // Source lives under its own "source/{id}" prefix (UploadService), never under
+        // storagePrefix, so the sweep above doesn't touch it. Safe to call unconditionally on
+        // sourceDeletedAt: if SourceRetentionCleanupJob already removed it, the prefix is
+        // already empty and this is a no-op.
+        if (video.getSourceKey() != null) {
+            storagePrefixMover.deleteAll("source/" + video.getId());
+        }
         videoRepository.delete(video);
     }
 
@@ -105,7 +112,10 @@ public class VideoManagementService {
         storagePrefixMover.move(oldPrefix, newPrefix);
 
         video.setStoragePrefix(newPrefix);
-        video.setSourceKey(StoragePrefixMover.rewriteKey(video.getSourceKey(), oldPrefix, newPrefix));
+        // sourceKey deliberately NOT rewritten here - it lives under its own "source/{id}"
+        // prefix (UploadService), never under storagePrefix, so it never moves on a visibility
+        // change. rewriteKey() assumes the key starts with oldPrefix; calling it on sourceKey
+        // would silently corrupt it.
         video.setPlaylistKey(StoragePrefixMover.rewriteKey(video.getPlaylistKey(), oldPrefix, newPrefix));
         video.setThumbnailKey(StoragePrefixMover.rewriteKey(video.getThumbnailKey(), oldPrefix, newPrefix));
         video.setSpriteSheetKey(StoragePrefixMover.rewriteKey(video.getSpriteSheetKey(), oldPrefix, newPrefix));
