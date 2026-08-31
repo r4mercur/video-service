@@ -14,12 +14,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.*;
@@ -27,6 +31,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -146,7 +151,39 @@ public class SecurityConfig {
         return source;
     }
 
+    /**
+     * Guards /api/actuator/prometheus with its own HTTP Basic credentials instead of the JWT
+     * resource server - Prometheus's scrape config has no way to obtain or refresh a bearer
+     * token. Declared with @Order(1) so this narrower securityMatcher is evaluated before the
+     * catch-all chain below and takes over exclusively for this one path (CLAUDE.md 3.2:
+     * ownership/auth checks live in exactly one place - this keeps the metrics endpoint's auth
+     * out of the general-purpose chain instead of bolting an exception onto it). In production
+     * this path is additionally blocked at the Caddy layer (Caddyfile.prod) so it's never
+     * reachable from the public internet in the first place; Prometheus itself scrapes it
+     * directly over the internal Docker network, never through Caddy.
+     */
     @Bean
+    @Order(1)
+    public SecurityFilterChain actuatorMetricsFilterChain(HttpSecurity http, ActuatorSecurityProperties properties,
+                                                            PasswordEncoder passwordEncoder) throws Exception {
+        InMemoryUserDetailsManager metricsUser = new InMemoryUserDetailsManager(User
+                .withUsername(properties.metricsUsername())
+                .password(passwordEncoder.encode(properties.metricsPassword()))
+                .roles("METRICS")
+                .build());
+
+        http
+                .securityMatcher("/api/actuator/prometheus")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("METRICS"))
+                .httpBasic(Customizer.withDefaults())
+                .userDetailsService(metricsUser);
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder,
                                                      BearerTokenResolver bearerTokenResolver,
                                                      CorsConfigurationSource corsConfigurationSource,

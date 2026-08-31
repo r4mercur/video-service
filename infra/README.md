@@ -158,7 +158,67 @@ this setup:
    check a few rows against what's actually in production.
 4. Delete the throwaway container and `/tmp/restore-test` afterwards.
 
-## 6. Growing past Phase 0
+## 6. Monitoring (Prometheus + Grafana, AP9) - optional, do this once you want dashboards
+
+**DNS.** Add another A record (and AAAA) for `grafana.<your-domain>` pointing at the same
+`server_ipv4`/`server_ipv6` as the main domain - Grafana gets its own Caddy site block and
+therefore its own automatic TLS certificate (`Caddyfile.prod`).
+
+**Shared secret for Prometheus's scrape auth.** `/api/actuator/prometheus` requires Basic Auth
+(`SecurityConfig`). The app reads the password from `.env`; Prometheus's own config file can't
+read `.env`, so it reads the same value from a plain file instead - same pattern as
+`restic-password` in step 4 above:
+
+```bash
+openssl rand -base64 24 | ssh bjarne@<server_ipv4> "sudo tee /opt/video-service/secrets/prometheus-metrics-password && sudo chmod 644 /opt/video-service/secrets/prometheus-metrics-password && sudo chown root:root /opt/video-service/secrets/prometheus-metrics-password"
+```
+
+644, not 600 - same reasoning as the JWT keys in step 2: the `prometheus` container reads it as
+its own internal user, which the bind mount can't map back to a host account, and this is a
+single-tenant box.
+
+Then, in `/opt/video-service/.env`:
+
+```bash
+sudo nano /opt/video-service/.env
+```
+
+- `APP_ACTUATOR_METRICS_USERNAME=prometheus` (not secret, must match `prometheus.prod.yml`)
+- `APP_ACTUATOR_METRICS_PASSWORD=<the value you just generated above>` - must be *exactly* the
+  same string as `secrets/prometheus-metrics-password`, or the app rejects Prometheus's scrapes
+  with 401. The two are separate files by necessity (env var vs. static YAML config) and are not
+  kept in sync automatically.
+- `GRAFANA_ADMIN_PASSWORD=<a real password>` - replaces the dev-only `"admin"` default.
+
+Redeploy to pick up the new services:
+
+```bash
+ssh bjarne@<server_ipv4> "cd /opt/video-service && sudo docker compose -f compose.prod.yaml up -d"
+```
+
+**Verify:**
+
+```bash
+curl https://grafana.your-domain.example                    # Grafana login page
+ssh bjarne@<server_ipv4> "cd /opt/video-service && sudo docker compose -f compose.prod.yaml exec prometheus wget -qO- http://localhost:9090/api/v1/targets"
+# look for "health":"up" on the video-service job
+```
+
+Prometheus itself is intentionally never exposed through Caddy (only Grafana is) - its UI is
+still reachable ad hoc for raw PromQL queries via an SSH tunnel, since `compose.prod.yaml` binds
+it to the server's own loopback only (`127.0.0.1:9090:9090`):
+
+```bash
+ssh -L 9090:localhost:9090 bjarne@<server_ipv4>
+# then open http://localhost:9090 locally
+```
+
+Grafana ships with a Prometheus datasource pre-provisioned (`grafana/provisioning/`) but no
+dashboards yet - import one from grafana.com (e.g. a Micrometer/Spring Boot dashboard) or build
+your own; CLAUDE.md's AP9 also calls for alerting on `transcode_jobs` queue depth, which isn't
+wired up yet.
+
+## 7. Growing past Phase 0
 
 Change `server_type` in `variables.tf` (or pass `-var server_type=cx43`) and `terraform apply` -
 Hetzner resizes the existing server, no new resources needed (CLAUDE.md §11 Phase 1/2). A second,

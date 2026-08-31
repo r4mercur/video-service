@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # app is a compose service here (unlike dev, where the app runs on the host) - reached
+  # directly by its service name over the internal Docker network, never through Caddy.
+  - job_name: video-service
+    metrics_path: /api/actuator/prometheus
+    # username isn't secret (matches APP_ACTUATOR_METRICS_USERNAME's default in .env.example);
+    # the password is server-local only, see infra/README.md's monitoring section for how it's
+    # created and kept in sync with APP_ACTUATOR_METRICS_PASSWORD.
+    basic_auth:
+      username: prometheus
+      password_file: /secrets/prometheus-metrics-password
+    static_configs:
+      - targets: ['app:8080']

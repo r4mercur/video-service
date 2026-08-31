@@ -10,5 +10,10 @@ scrape_configs:
   # reached the same way Caddy reaches it (see Caddyfile) - via host.docker.internal.
   - job_name: video-service
     metrics_path: /api/actuator/prometheus
+    # Matches application.properties' dev-only app.actuator.metrics-* defaults - production
+    # uses a real secret via basic_auth.password_file instead, see prometheus.prod.yml.
+    basic_auth:
+      username: prometheus
+      password: prometheus-dev-only
     static_configs:
       - targets: ['host.docker.internal:8080']

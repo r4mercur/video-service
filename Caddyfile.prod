@@ -7,6 +7,16 @@
 # just works, no file edit needed. Same placeholder pattern as {$STORAGE_BUCKET} in ./Caddyfile.
 
 {$DOMAIN} {
+	# /api/actuator/prometheus has its own Basic-Auth filter chain (SecurityConfig), but it's
+	# also blocked here entirely - defense in depth, and it keeps internal metrics off the
+	# public internet even if that chain is ever misconfigured. Prometheus itself never goes
+	# through Caddy - it scrapes app:8080 directly over the internal Docker network (see
+	# compose.prod.yaml).
+	@blockedActuator path /api/actuator/prometheus
+	handle @blockedActuator {
+		respond 404
+	}
+
 	@api path /api/*
 	handle @api {
 		reverse_proxy app:8080
@@ -19,11 +29,24 @@
 		# Frontend CSP (§9.3 / frontend AP9): segments/thumbnails/playlists are fetched directly
 		# from the object storage origin, not this one - connect-src/media-src must allow it or
 		# playback silently breaks. {$STORAGE_PUBLIC_ORIGIN} is set alongside {$DOMAIN} in .env.
+		# media-src also needs `blob:`: hls.js plays HLS via MediaSource Extensions, which attaches
+		# to the <video> element through a `blob:` URL (URL.createObjectURL), not the manifest's
+		# own origin - without it Chrome rejects that blob URL outright (MEDIA_ELEMENT_ERROR /
+		# "Media load rejected by URL safety check") and every video fails to play, found
+		# 2026-08-31 while checking on an unrelated upload.
 		header {
-			Content-Security-Policy "default-src 'self'; media-src 'self' {$STORAGE_PUBLIC_ORIGIN}; connect-src 'self' {$STORAGE_PUBLIC_ORIGIN}; img-src 'self' {$STORAGE_PUBLIC_ORIGIN} data:; style-src 'self' 'unsafe-inline'"
+			Content-Security-Policy "default-src 'self'; media-src 'self' blob: {$STORAGE_PUBLIC_ORIGIN}; connect-src 'self' {$STORAGE_PUBLIC_ORIGIN}; img-src 'self' {$STORAGE_PUBLIC_ORIGIN} data:; style-src 'self' 'unsafe-inline'"
 		}
 
 		try_files {path} /index.html
 		file_server
 	}
+}
+
+# Grafana (AP9). A separate site block gets its own automatic TLS cert - needs its own
+# DNS A/AAAA record pointed at the server (infra/README.md's monitoring section), same as
+# {$DOMAIN} itself. Auth is Grafana's own login (GF_SECURITY_ADMIN_PASSWORD via .env,
+# compose.prod.yaml) - not Spring Security, since Grafana isn't part of the JVM process.
+grafana.{$DOMAIN} {
+	reverse_proxy grafana:3000
 }
