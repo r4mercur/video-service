@@ -79,9 +79,17 @@ jobs:
       # /opt/video-service/incoming or one of the two fixed "deploy ..." trigger phrases below,
       # never arbitrary shell (CLAUDE.md §11: a leaked deploy key can't delete the server; here
       # it additionally can't do anything on the server beyond these two actions either).
-      - name: Upload compose + Caddy config
+      # -R (relative) keeps the prometheus/ and grafana/provisioning/ paths intact inside the
+      # incoming dir, so deploy.sh can copy them into place 1:1. The monitoring configs are
+      # bind-mounts on the server, NOT part of the app image - without shipping them here, a
+      # dashboard or alert-rule change in the repo silently never reaches production.
+      - name: Upload compose, Caddy and monitoring config
         run: |
-          rsync -e "ssh -i ~/.ssh/deploy_key" compose.prod.yaml Caddyfile.prod deploy@"${{ secrets.HETZNER_HOST }}":./
+          rsync -rR -e "ssh -i ~/.ssh/deploy_key" \
+            compose.prod.yaml Caddyfile.prod \
+            prometheus/prometheus.prod.yml prometheus/alerts.yml \
+            grafana/provisioning \
+            deploy@"${{ secrets.HETZNER_HOST }}":./
 
       - name: Apply config and deploy image
         run: |

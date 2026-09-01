@@ -213,10 +213,15 @@ ssh -L 9090:localhost:9090 bjarne@<server_ipv4>
 # then open http://localhost:9090 locally
 ```
 
-Grafana ships with a Prometheus datasource pre-provisioned (`grafana/provisioning/`) but no
-dashboards yet - import one from grafana.com (e.g. a Micrometer/Spring Boot dashboard) or build
-your own; CLAUDE.md's AP9 also calls for alerting on `transcode_jobs` queue depth, which isn't
-wired up yet.
+Grafana comes fully provisioned from the repo (`grafana/provisioning/`): the Prometheus
+datasource plus three dashboards ("Service Health", "Media Pipeline", "Auth & Content") in the
+"Video Service" folder. Prometheus evaluates the alert rules in `prometheus/alerts.yml`
+(CLAUDE.md AP9 queue alerting) - firing alerts are visible in its UI and on the Service Health
+dashboard, but nothing notifies anyone until an Alertmanager is added. All of these are
+bind-mounted server files, NOT part of the app image: the release workflow rsyncs them and
+`deploy.sh`'s "deploy files" copies them into place and restarts prometheus/grafana. Remember
+that `deploy.sh` itself is baked in by cloud-init - a change to it must be copied to
+`/opt/video-service/deploy.sh` manually (as root, keeping it non-writable for `deploy`).
 
 ## 7. Growing past Phase 0
 

@@ -16,6 +16,20 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
   "deploy files")
     cp "$INCOMING_DIR/compose.prod.yaml" "$APP_DIR/compose.prod.yaml"
     cp "$INCOMING_DIR/Caddyfile.prod" "$APP_DIR/Caddyfile.prod"
+
+    # Monitoring configs (Prometheus rules/config, Grafana provisioning incl. dashboards) are
+    # bind-mounts too - they have to travel with the deploy or repo changes never reach prod.
+    # Guarded per file so an older CI run that doesn't upload them still deploys cleanly.
+    if [ -f "$INCOMING_DIR/prometheus/prometheus.prod.yml" ]; then
+      mkdir -p "$APP_DIR/prometheus"
+      cp "$INCOMING_DIR/prometheus/prometheus.prod.yml" "$APP_DIR/prometheus/prometheus.prod.yml"
+      cp "$INCOMING_DIR/prometheus/alerts.yml" "$APP_DIR/prometheus/alerts.yml"
+    fi
+    if [ -d "$INCOMING_DIR/grafana/provisioning" ]; then
+      mkdir -p "$APP_DIR/grafana"
+      rsync -a --delete "$INCOMING_DIR/grafana/provisioning/" "$APP_DIR/grafana/provisioning/"
+    fi
+
     cd "$APP_DIR"
     # Caddyfile.prod is bind-mounted, so a content-only change (no different image, no changed
     # volumes line) is invisible to `docker compose up -d` in the "deploy backend" case below -
@@ -27,6 +41,15 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
     if docker compose -f compose.prod.yaml ps --status running --services 2>/dev/null | grep -qx caddy; then
       docker compose -f compose.prod.yaml exec caddy caddy reload --config /etc/caddy/Caddyfile
     fi
+    # Same bind-mount blindness as caddy above, and neither container reloads config on its own:
+    # Prometheus only reads rule_files/config at startup (no --web.enable-lifecycle) and Grafana
+    # only registers provisioning providers at startup. Restart both so config-only deploys take
+    # effect; skipped on the very first deploy when nothing is running yet.
+    for svc in prometheus grafana; do
+      if docker compose -f compose.prod.yaml ps --status running --services 2>/dev/null | grep -qx "$svc"; then
+        docker compose -f compose.prod.yaml restart "$svc"
+      fi
+    done
     ;;
   "deploy frontend")
     rsync -a --delete "$INCOMING_DIR/frontend/" "$APP_DIR/frontend-dist/"
