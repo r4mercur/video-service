@@ -14,6 +14,8 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     boolean existsBySlug(String slug);
 
+    long countByStatus(VideoStatus status);
+
     Optional<Video> findBySlug(String slug);
 
     List<Video> findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBefore(Instant cutoff);

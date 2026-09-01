@@ -8,6 +8,9 @@ import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import com.bjarne.videoservice.shared.exceptions.ValidationException;
 import com.bjarne.videoservice.transcoding.TranscodeJob;
 import com.bjarne.videoservice.transcoding.TranscodeJobRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,11 +30,14 @@ public class UploadService {
     private final S3MultipartClient s3MultipartClient;
     private final UploadProperties properties;
     private final Clock clock;
+    private final Counter initiatedCounter;
+    private final Counter completedCounter;
+    private final DistributionSummary uploadSizeSummary;
 
     public UploadService(CategoryRepository categoryRepository, VideoRepository videoRepository,
                           UserRepository userRepository, UploadSessionRepository uploadSessionRepository,
                           TranscodeJobRepository transcodeJobRepository, S3MultipartClient s3MultipartClient,
-                          UploadProperties properties, Clock clock) {
+                          UploadProperties properties, Clock clock, MeterRegistry meterRegistry) {
         this.categoryRepository = categoryRepository;
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
@@ -40,6 +46,16 @@ public class UploadService {
         this.s3MultipartClient = s3MultipartClient;
         this.properties = properties;
         this.clock = clock;
+        this.initiatedCounter = Counter.builder("videoservice.uploads.initiated")
+                .description("Upload sessions created (multipart upload started)")
+                .register(meterRegistry);
+        this.completedCounter = Counter.builder("videoservice.uploads.completed")
+                .description("Upload sessions completed (CompleteMultipartUpload succeeded)")
+                .register(meterRegistry);
+        this.uploadSizeSummary = DistributionSummary.builder("videoservice.upload.size.bytes")
+                .baseUnit("bytes")
+                .description("Actual size of completed uploads as reported by storage")
+                .register(meterRegistry);
     }
 
     @Transactional
@@ -80,6 +96,7 @@ public class UploadService {
         UploadSession session = new UploadSession(video, uploadId, s3Key, expiresAt);
         uploadSessionRepository.save(session);
 
+        initiatedCounter.increment();
         return new InitiateUploadResponse(video.getId(), parts, properties.partSizeBytes(), expiresAt);
     }
 
@@ -105,6 +122,8 @@ public class UploadService {
         uploadSessionRepository.save(session);
 
         transcodeJobRepository.save(new TranscodeJob(video, clock.instant()));
+        completedCounter.increment();
+        uploadSizeSummary.record(actualSize);
     }
 
     @Transactional(readOnly = true)

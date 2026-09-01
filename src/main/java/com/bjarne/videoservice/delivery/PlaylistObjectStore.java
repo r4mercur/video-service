@@ -5,6 +5,8 @@ import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -29,14 +31,17 @@ public class PlaylistObjectStore {
     private final Cache<String, String> cache;
 
     public PlaylistObjectStore(S3Client s3Client, S3Properties s3Properties, S3BucketInitializer bucketInitializer,
-                                DeliveryProperties deliveryProperties) {
+                                DeliveryProperties deliveryProperties, MeterRegistry meterRegistry) {
         this.s3Client = s3Client;
         this.s3Properties = s3Properties;
         this.bucketInitializer = bucketInitializer;
         this.cache = Caffeine.newBuilder()
                 .maximumSize(deliveryProperties.playlistCacheMaxSize())
                 .expireAfterWrite(deliveryProperties.playlistCacheTtl())
+                // recordStats is required for CaffeineCacheMetrics to report anything but zeros.
+                .recordStats()
                 .build();
+        CaffeineCacheMetrics.monitor(meterRegistry, cache, "playlists");
     }
 
     public String fetch(String key) {

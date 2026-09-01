@@ -3,6 +3,8 @@ package com.bjarne.videoservice.identity;
 import com.bjarne.videoservice.shared.exceptions.ConflictException;
 import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import com.bjarne.videoservice.shared.exceptions.UnauthorizedException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,16 +27,32 @@ public class AuthService {
     private final AuthProperties properties;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
+    private final Counter loginSuccessCounter;
+    private final Counter loginFailureCounter;
+    private final Counter refreshReuseCounter;
 
     public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
                         PasswordEncoder passwordEncoder, JwtService jwtService, AuthProperties properties,
-                        Clock clock) {
+                        Clock clock, MeterRegistry meterRegistry) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.properties = properties;
         this.clock = clock;
+        this.loginSuccessCounter = Counter.builder("videoservice.auth.logins")
+                .tag("result", "success")
+                .description("Login attempts by result")
+                .register(meterRegistry);
+        this.loginFailureCounter = Counter.builder("videoservice.auth.logins")
+                .tag("result", "failure")
+                .description("Login attempts by result")
+                .register(meterRegistry);
+        // Every increment means a refresh token was presented twice - either a replayed/stolen
+        // token or a badly misbehaving client. The single most alert-worthy signal in auth.
+        this.refreshReuseCounter = Counter.builder("videoservice.auth.refresh.reuse")
+                .description("Refresh token reuse detected (token family revoked)")
+                .register(meterRegistry);
     }
 
     public record LoginResult(UserResponse user, String accessToken, long expiresInSeconds, String refreshToken) {
@@ -60,12 +78,17 @@ public class AuthService {
     public LoginResult login(LoginRequest request, String userAgent) {
         User user = userRepository.findByEmail(request.identifier())
                 .or(() -> userRepository.findByUsername(request.identifier()))
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+                .orElseThrow(() -> {
+                    loginFailureCounter.increment();
+                    return new UnauthorizedException("Invalid credentials");
+                });
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            loginFailureCounter.increment();
             throw new UnauthorizedException("Invalid credentials");
         }
 
+        loginSuccessCounter.increment();
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = issueRefreshToken(user, userAgent, null);
         return new LoginResult(UserResponse.from(user), accessToken, properties.accessTokenTtl().toSeconds(),
@@ -83,6 +106,7 @@ public class AuthService {
 
         if (current.getRevokedAt() != null) {
             revokeChainTail(current);
+            refreshReuseCounter.increment();
             throw new UnauthorizedException("Refresh token reuse detected");
         }
         if (current.getExpiresAt().isBefore(clock.instant())) {

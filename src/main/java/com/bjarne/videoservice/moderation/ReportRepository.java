@@ -13,6 +13,8 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
 
     boolean existsByVideoIdAndStatus(UUID videoId, ReportStatus status);
 
+    long countByStatus(ReportStatus status);
+
     /*
      * cursorTs/cursorId are never null (AdminService passes an "infinitely far in the future"
      * sentinel when there's no cursor) - see CatalogService for the same reasoning

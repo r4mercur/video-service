@@ -18,6 +18,13 @@ public interface TranscodeJobRepository extends JpaRepository<TranscodeJob, Long
 
     Optional<TranscodeJob> findFirstByVideoIdOrderByCreatedAtDesc(UUID videoId);
 
+    long countByStatus(JobStatus status);
+
+    long countByStatusAndType(JobStatus status, JobType type);
+
+    @Query("select min(j.scheduledAt) from TranscodeJob j where j.status = :status")
+    Optional<Instant> findOldestScheduledAt(@Param("status") JobStatus status);
+
     List<TranscodeJob> findByStatusAndLockedAtBefore(JobStatus status, Instant cutoff);
 
     boolean existsByVideoIdAndTypeAndStatusIn(UUID videoId, JobType type, List<JobStatus> statuses);

@@ -1,7 +1,19 @@
 apiVersion: 1
 
+# Removes the pre-uid "Prometheus" datasource that older grafana-data volumes still hold.
+# Without this, adding the explicit uid below makes provisioning fail on startup ("data
+# source not found") because Grafana can neither find the datasource by its new uid nor
+# insert it under the already-taken name. Runs before the datasources block, harmless once
+# the old entry is gone.
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
 datasources:
   - name: Prometheus
+    # Fixed uid so the provisioned dashboards (../dashboards/json) can reference this
+    # datasource stably instead of relying on "the default one".
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090

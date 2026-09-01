@@ -1,6 +1,7 @@
 package com.bjarne.videoservice.transcoding;
 
 import com.bjarne.videoservice.catalog.VisibilityMigrationService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -38,7 +39,7 @@ class JobPollerTest {
         TranscodeOutcome outcome = new TranscodeOutcome(null, java.util.List.of(), false, false);
         when(transcodeService.process(videoId, 1L)).thenReturn(outcome);
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService).poll();
+        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, new SimpleMeterRegistry()).poll();
 
         verify(transcodeService).process(videoId, 1L);
         verify(lifecycle).recordSuccess(1L, videoId, outcome);
@@ -52,7 +53,7 @@ class JobPollerTest {
         when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
         when(visibilityMigrationService.migrate(videoId, 2L)).thenReturn("private/" + videoId);
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService).poll();
+        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, new SimpleMeterRegistry()).poll();
 
         verify(visibilityMigrationService).migrate(videoId, 2L);
         verify(lifecycle).recordMigrationSuccess(2L, videoId, "private/" + videoId);
@@ -66,7 +67,7 @@ class JobPollerTest {
         when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
         when(visibilityMigrationService.migrate(videoId, 3L)).thenThrow(new RuntimeException("S3 copy failed"));
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService).poll();
+        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, new SimpleMeterRegistry()).poll();
 
         verify(lifecycle).recordMigrationTransientFailure(eq(3L), any());
         verify(lifecycle, never()).recordTransientFailure(anyLong(), any(), any());

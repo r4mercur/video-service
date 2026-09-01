@@ -1,0 +1,16 @@
+apiVersion: 1
+
+# File-provisioned dashboards - the JSONs live in the repo (json/ next to this file) and are
+# mounted into the container via the ./grafana/provisioning mount both composes already have.
+providers:
+  - name: video-service
+    folder: Video Service
+    type: file
+    disableDeletion: false
+    # UI edits are allowed for experimentation but NOT written back to the repo - a provisioned
+    # dashboard's "Save" only persists to Grafana's own DB and is overwritten on the next
+    # provisioning cycle. Durable changes belong in the JSON files.
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

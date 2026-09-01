@@ -6,6 +6,8 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,7 +29,12 @@ public class RateLimiter {
     private final Cache<String, Bucket> reportBuckets;
     private final Cache<String, Bucket> reportAnonymousBuckets;
 
-    public RateLimiter(RateLimitProperties properties) {
+    private final Counter loginRejections;
+    private final Counter registerRejections;
+    private final Counter reportRejections;
+    private final Counter reportAnonymousRejections;
+
+    public RateLimiter(RateLimitProperties properties, MeterRegistry meterRegistry) {
         this.loginLimit = properties.login();
         this.registerLimit = properties.register();
         this.reportLimit = properties.report();
@@ -36,26 +43,42 @@ public class RateLimiter {
         this.registerBuckets = buildCache(registerLimit);
         this.reportBuckets = buildCache(reportLimit);
         this.reportAnonymousBuckets = buildCache(reportAnonymousLimit);
+        this.loginRejections = rejectionCounter(meterRegistry, "login");
+        this.registerRejections = rejectionCounter(meterRegistry, "register");
+        this.reportRejections = rejectionCounter(meterRegistry, "report");
+        this.reportAnonymousRejections = rejectionCounter(meterRegistry, "report_anonymous");
     }
 
     public boolean tryConsumeLogin(String ip) {
-        return tryConsume(loginBuckets, ip, loginLimit);
+        return tryConsume(loginBuckets, ip, loginLimit, loginRejections);
     }
 
     public boolean tryConsumeRegister(String ip) {
-        return tryConsume(registerBuckets, ip, registerLimit);
+        return tryConsume(registerBuckets, ip, registerLimit, registerRejections);
     }
 
     public boolean tryConsumeReport(String userId) {
-        return tryConsume(reportBuckets, userId, reportLimit);
+        return tryConsume(reportBuckets, userId, reportLimit, reportRejections);
     }
 
     public boolean tryConsumeReportAnonymous(String ip) {
-        return tryConsume(reportAnonymousBuckets, ip, reportAnonymousLimit);
+        return tryConsume(reportAnonymousBuckets, ip, reportAnonymousLimit, reportAnonymousRejections);
     }
 
-    private boolean tryConsume(Cache<String, Bucket> cache, String key, RateLimitProperties.Limit limit) {
-        return cache.get(key, k -> newBucket(limit)).tryConsume(1);
+    private boolean tryConsume(Cache<String, Bucket> cache, String key, RateLimitProperties.Limit limit,
+                                Counter rejections) {
+        boolean allowed = cache.get(key, k -> newBucket(limit)).tryConsume(1);
+        if (!allowed) {
+            rejections.increment();
+        }
+        return allowed;
+    }
+
+    private Counter rejectionCounter(MeterRegistry meterRegistry, String limiter) {
+        return Counter.builder("videoservice.ratelimit.rejected")
+                .tag("limiter", limiter)
+                .description("Requests rejected by rate limiting, per limiter")
+                .register(meterRegistry);
     }
 
     private Bucket newBucket(RateLimitProperties.Limit limit) {

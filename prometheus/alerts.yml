@@ -1,0 +1,65 @@
+# Alert rules for the video-service scrape job (AP9, CLAUDE.md 10: "queue alerting").
+# Shared between dev and prod - both compose files mount this next to their prometheus.yml.
+#
+# NOTE: there is deliberately no Alertmanager (yet) - firing alerts are visible in the
+# Prometheus UI under /alerts and on the "Service Health" Grafana dashboard via the ALERTS
+# metric, but nothing pages anyone. When a notification channel is wanted, add Alertmanager
+# as its own compose service and wire `alerting:` in prometheus(.prod).yml - the rules here
+# stay unchanged.
+
+groups:
+  - name: video-service
+    rules:
+      - alert: VideoServiceDown
+        expr: up{job="video-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "video-service scrape target is down"
+          description: "Prometheus has not been able to scrape the app for 2 minutes."
+
+      # Based on the DB-backed gauge (JobQueueMetrics), so it works no matter which process is
+      # scraped. 30 minutes overdue covers even a 2h-video transcode currently occupying the
+      # single worker (CLAUDE.md 9.2: concurrency starts at 1) plus normal retry backoff -
+      # sustained beyond that means the worker is stuck or dead.
+      - alert: TranscodeQueueStalled
+        expr: videoservice_jobs_oldest_pending_age_seconds > 1800
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Transcode queue is not draining"
+          description: "The oldest PENDING job has been overdue for {{ $value }}s. Worker stuck, dead, or overloaded?"
+
+      # Only transient failures (S3/FFmpeg/infrastructure) - failed_validation is a user
+      # uploading a broken file, which is expected and not an ops signal.
+      - alert: JobTransientFailures
+        expr: increase(videoservice_jobs_processed_total{outcome="failed_transient"}[1h]) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: "Jobs are failing with transient errors"
+          description: "{{ $value }} transient job failures in the last hour (type {{ $labels.type }})."
+
+      - alert: HighHttp5xxRate
+        expr: >
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count[5m])) > 0.05
+          and sum(rate(http_server_requests_seconds_count[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5% of HTTP requests return 5xx"
+          description: "5xx ratio has been above 5% for 5 minutes (with non-trivial traffic)."
+
+      # Zero-tolerance: a single reuse means a refresh token was presented twice (CLAUDE.md 8
+      # reuse detection) - replayed/stolen token or a badly broken client, either way worth a look.
+      - alert: RefreshTokenReuseDetected
+        expr: increase(videoservice_auth_refresh_reuse_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Refresh token reuse detected"
+          description: "{{ $value }} reuse detections in the last 15 minutes - token theft or a misbehaving client."

@@ -4,6 +4,8 @@ import com.bjarne.videoservice.config.ViewCountProperties;
 import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,9 +26,11 @@ public class ViewCountService {
     private final VideoViewStatsRepository statsRepository;
     private final Clock clock;
     private final Cache<String, Boolean> dedupCache;
+    private final Counter countedViews;
+    private final Counter deduplicatedViews;
 
     public ViewCountService(VideoRepository videoRepository, VideoViewStatsRepository statsRepository,
-                             ViewCountProperties properties, Clock clock) {
+                             ViewCountProperties properties, Clock clock, MeterRegistry meterRegistry) {
         this.videoRepository = videoRepository;
         this.statsRepository = statsRepository;
         this.clock = clock;
@@ -34,6 +38,14 @@ public class ViewCountService {
                 .expireAfterWrite(properties.dedupWindow())
                 .maximumSize(100_000)
                 .build();
+        this.countedViews = Counter.builder("videoservice.views")
+                .tag("result", "counted")
+                .description("View events by dedup result")
+                .register(meterRegistry);
+        this.deduplicatedViews = Counter.builder("videoservice.views")
+                .tag("result", "deduplicated")
+                .description("View events by dedup result")
+                .register(meterRegistry);
     }
 
     @Transactional
@@ -46,6 +58,9 @@ public class ViewCountService {
         boolean firstViewInWindow = dedupCache.asMap().putIfAbsent(key, Boolean.TRUE) == null;
         if (firstViewInWindow) {
             statsRepository.incrementViews(videoId, LocalDate.now(clock));
+            countedViews.increment();
+        } else {
+            deduplicatedViews.increment();
         }
     }
 }
