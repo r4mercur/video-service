@@ -9,6 +9,9 @@ import com.bjarne.videoservice.identity.UserRepository;
 import com.bjarne.videoservice.moderation.Report;
 import com.bjarne.videoservice.moderation.ReportRepository;
 import com.bjarne.videoservice.support.AbstractS3IntegrationTest;
+import com.bjarne.videoservice.transcoding.ClaimedJob;
+import com.bjarne.videoservice.transcoding.JobType;
+import com.bjarne.videoservice.transcoding.TranscodeJobLifecycle;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -71,6 +74,12 @@ class VideoManagementControllerIntegrationTest extends AbstractS3IntegrationTest
     @Autowired
     private S3BucketInitializer bucketInitializer;
 
+    @Autowired
+    private TranscodeJobLifecycle transcodeJobLifecycle;
+
+    @Autowired
+    private VisibilityMigrationService visibilityMigrationService;
+
     private String currentUsername;
 
     @Test
@@ -94,26 +103,65 @@ class VideoManagementControllerIntegrationTest extends AbstractS3IntegrationTest
     }
 
     @Test
-    void updateVisibilityMovesObjectsBetweenStoragePrefixes() throws Exception {
+    void updateVisibilityEnqueuesMigrationJobInsteadOfMovingSynchronously() throws Exception {
         String accessToken = registerAndLogin();
         Video video = seedVideo(currentUser(), Visibility.PUBLIC);
         String oldKey = video.getStoragePrefix() + "/master.m3u8";
+
+        // CLAUDE.md 3.2/9.5: the S3 move must never happen inside the request thread. The PATCH
+        // only records intent (202 Accepted, visibility unchanged, visibilityTarget set) and
+        // enqueues a VISIBILITY_MIGRATION job for the worker.
+        mockMvc.perform(patch("/api/videos/" + video.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateVideoRequest(
+                                null, null, null, Visibility.PRIVATE))))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.visibility").value("PUBLIC"));
+
+        Video afterPatch = videoRepository.findById(video.getId()).orElseThrow();
+        assertThat(afterPatch.getVisibility()).isEqualTo(Visibility.PUBLIC);
+        assertThat(afterPatch.getVisibilityTarget()).isEqualTo(Visibility.PRIVATE);
+        assertThat(afterPatch.getStoragePrefix()).isEqualTo(video.getStoragePrefix());
+        headObject(oldKey);
+
+        // Drive the enqueued job to completion the way JobPoller would.
+        ClaimedJob claimed = transcodeJobLifecycle.claimNext("test-worker").orElseThrow();
+        assertThat(claimed.type()).isEqualTo(JobType.VISIBILITY_MIGRATION);
+        String newPrefix = visibilityMigrationService.migrate(claimed.videoId(), claimed.jobId());
+        transcodeJobLifecycle.recordMigrationSuccess(claimed.jobId(), claimed.videoId(), newPrefix);
+
+        Video reloaded = videoRepository.findById(video.getId()).orElseThrow();
+        String expectedPrefix = "private/" + video.getId();
+        assertThat(reloaded.getVisibility()).isEqualTo(Visibility.PRIVATE);
+        assertThat(reloaded.getVisibilityTarget()).isNull();
+        assertThat(reloaded.getStoragePrefix()).isEqualTo(expectedPrefix);
+        assertThat(reloaded.getPlaylistKey()).isEqualTo(expectedPrefix + "/master.m3u8");
+
+        assertThatThrownBy(() -> headObject(oldKey)).isInstanceOf(NoSuchKeyException.class);
+        headObject(expectedPrefix + "/master.m3u8");
+    }
+
+    @Test
+    void updateVisibilityWhileMigrationInProgressReturnsConflict() throws Exception {
+        String accessToken = registerAndLogin();
+        Video video = seedVideo(currentUser(), Visibility.PUBLIC);
 
         mockMvc.perform(patch("/api/videos/" + video.getId())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateVideoRequest(
                                 null, null, null, Visibility.PRIVATE))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.visibility").value("PRIVATE"));
+                .andExpect(status().isAccepted());
 
-        Video reloaded = videoRepository.findById(video.getId()).orElseThrow();
-        String newPrefix = "private/" + video.getId();
-        assertThat(reloaded.getStoragePrefix()).isEqualTo(newPrefix);
-        assertThat(reloaded.getPlaylistKey()).isEqualTo(newPrefix + "/master.m3u8");
-
-        assertThatThrownBy(() -> headObject(oldKey)).isInstanceOf(NoSuchKeyException.class);
-        headObject(newPrefix + "/master.m3u8");
+        // A second PATCH while the first migration job is still PENDING must not race the first
+        // one's S3 move (this guard is what closes the production NoSuchKeyException race).
+        mockMvc.perform(patch("/api/videos/" + video.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateVideoRequest(
+                                null, null, null, Visibility.PRIVATE))))
+                .andExpect(status().isConflict());
     }
 
     @Test

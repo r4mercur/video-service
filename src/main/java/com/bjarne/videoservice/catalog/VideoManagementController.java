@@ -19,8 +19,11 @@ public class VideoManagementController {
 
     @PatchMapping("/api/videos/{id}")
     @PreAuthorize("@videoOwnership.isOwner(#id, authentication)")
-    public VideoDetailDto update(@PathVariable UUID id, @Valid @RequestBody UpdateVideoRequest request) {
-        return videoManagementService.update(id, request);
+    public ResponseEntity<VideoDetailDto> update(@PathVariable UUID id, @Valid @RequestBody UpdateVideoRequest request) {
+        UpdateVideoResult result = videoManagementService.update(id, request);
+        return result.visibilityMigrationEnqueued()
+                ? ResponseEntity.accepted().body(result.video())
+                : ResponseEntity.ok(result.video());
     }
 
     @DeleteMapping("/api/videos/{id}")

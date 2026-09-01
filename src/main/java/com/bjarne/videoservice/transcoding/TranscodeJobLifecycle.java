@@ -1,9 +1,6 @@
 package com.bjarne.videoservice.transcoding;
 
-import com.bjarne.videoservice.catalog.Video;
-import com.bjarne.videoservice.catalog.VideoRendition;
-import com.bjarne.videoservice.catalog.VideoRepository;
-import com.bjarne.videoservice.catalog.VideoStatus;
+import com.bjarne.videoservice.catalog.*;
 import com.bjarne.videoservice.config.TranscodeProperties;
 import com.bjarne.videoservice.shared.exceptions.ConflictException;
 import com.bjarne.videoservice.shared.exceptions.NotFoundException;
@@ -50,7 +47,9 @@ public class TranscodeJobLifecycle {
         for (TranscodeJob job : stale) {
             boolean exhausted = requeueOrFail(job,
                     "Worker timeout: job was locked for longer than " + properties.staleJobTimeout());
-            if (exhausted) {
+            // A stale VISIBILITY_MIGRATION job leaves the video exactly as it was - still READY,
+            // still served from the old prefix/visibility (see recordMigrationTransientFailure).
+            if (exhausted && job.getType() == JobType.TRANSCODE) {
                 markVideoFailed(job.getVideo().getId());
             }
         }
@@ -94,7 +93,7 @@ public class TranscodeJobLifecycle {
         job.setAttempts(job.getAttempts() + 1);
         jobRepository.save(job);
         UUID videoId = job.getVideo().getId();
-        return Optional.of(new ClaimedJob(job.getId(), videoId));
+        return Optional.of(new ClaimedJob(job.getId(), videoId, job.getType()));
     }
 
     @Transactional
@@ -142,6 +141,44 @@ public class TranscodeJobLifecycle {
         if (exhausted) {
             markVideoFailed(videoId);
         }
+    }
+
+    @Transactional
+    public void recordMigrationSuccess(Long jobId, UUID videoId, String newPrefix) {
+        TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));
+        job.setStatus(JobStatus.DONE);
+        jobRepository.save(job);
+
+        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        String oldPrefix = video.getStoragePrefix();
+        video.setStoragePrefix(newPrefix);
+        video.setPlaylistKey(StoragePrefixMover.rewriteKey(video.getPlaylistKey(), oldPrefix, newPrefix));
+        video.setThumbnailKey(StoragePrefixMover.rewriteKey(video.getThumbnailKey(), oldPrefix, newPrefix));
+        video.setSpriteSheetKey(StoragePrefixMover.rewriteKey(video.getSpriteSheetKey(), oldPrefix, newPrefix));
+
+        Visibility newVisibility = video.getVisibilityTarget();
+        video.setVisibility(newVisibility);
+        video.setVisibilityTarget(null);
+        // CLAUDE.md 9.5: a PRIVATE -> PUBLIC migration is the publication event, but only the
+        // first time - a video already published stays at its original publishedAt across
+        // later visibility changes.
+        if (newVisibility == Visibility.PUBLIC && video.getPublishedAt() == null) {
+            video.setPublishedAt(clock.instant());
+        }
+        videoRepository.save(video);
+
+        videoRenditionRepository.findByVideoId(video.getId()).forEach(rendition ->
+                rendition.setPlaylistKey(StoragePrefixMover.rewriteKey(rendition.getPlaylistKey(), oldPrefix, newPrefix)));
+    }
+
+    @Transactional
+    public void recordMigrationTransientFailure(Long jobId, String error) {
+        TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));
+        // Unlike recordTransientFailure, a video whose migration is retried or even permanently
+        // fails must NOT be marked FAILED - it stays READY, still served from the old prefix at
+        // the old visibility. Only visibilityTarget (still set) and the job's own FAILED status
+        // record that a migration was attempted and didn't finish.
+        requeueOrFail(job, error);
     }
 
     /**

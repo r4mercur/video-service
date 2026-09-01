@@ -55,6 +55,7 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
         assertThat(claimed).isPresent();
         assertThat(claimed.get().jobId()).isEqualTo(job.getId());
         assertThat(claimed.get().videoId()).isEqualTo(video.getId());
+        assertThat(claimed.get().type()).isEqualTo(JobType.TRANSCODE);
 
         TranscodeJob reloaded = jobRepository.findById(job.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(JobStatus.RUNNING);
@@ -235,6 +236,100 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
 
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
         assertThat(videoRepository.findById(video.getId()).orElseThrow().getStatus()).isEqualTo(VideoStatus.FAILED);
+    }
+
+    @Test
+    void recordMigrationSuccessFlipsVisibilityRewritesKeysAndPublishesOnFirstPublic() {
+        Video video = seedVideo();
+        video.setVisibility(Visibility.PRIVATE);
+        video.setStoragePrefix("private/" + video.getId());
+        video.setPlaylistKey(video.getStoragePrefix() + "/master.m3u8");
+        video.setThumbnailKey(video.getStoragePrefix() + "/thumbnail.jpg");
+        video.setVisibilityTarget(Visibility.PUBLIC);
+        videoRepository.save(video);
+        videoRenditionRepository.save(new VideoRendition(video, 720, 2500,
+                video.getStoragePrefix() + "/720p/playlist.m3u8", 12345L));
+        TranscodeJob job = jobRepository.save(new TranscodeJob(video, clock.instant(), JobType.VISIBILITY_MIGRATION));
+
+        String newPrefix = "public/" + video.getId();
+        lifecycle.recordMigrationSuccess(job.getId(), video.getId(), newPrefix);
+
+        Video reloaded = videoRepository.findById(video.getId()).orElseThrow();
+        assertThat(reloaded.getVisibility()).isEqualTo(Visibility.PUBLIC);
+        assertThat(reloaded.getVisibilityTarget()).isNull();
+        assertThat(reloaded.getStoragePrefix()).isEqualTo(newPrefix);
+        assertThat(reloaded.getPlaylistKey()).isEqualTo(newPrefix + "/master.m3u8");
+        assertThat(reloaded.getThumbnailKey()).isEqualTo(newPrefix + "/thumbnail.jpg");
+        assertThat(reloaded.getPublishedAt()).isNotNull();
+
+        assertThat(videoRenditionRepository.findByVideoId(video.getId()))
+                .anySatisfy(r -> assertThat(r.getPlaylistKey()).isEqualTo(newPrefix + "/720p/playlist.m3u8"));
+
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.DONE);
+    }
+
+    @Test
+    void recordMigrationSuccessDoesNotOverwriteAlreadyPublishedAt() {
+        Video video = seedVideo();
+        // Truncated to microseconds: Postgres TIMESTAMPTZ has microsecond precision, Instant has
+        // nanosecond precision - without this the round-trip through the DB rounds the value and
+        // an exact isEqualTo below flakes on the last digit.
+        var originalPublishedAt = clock.instant().minusSeconds(3600).truncatedTo(ChronoUnit.MICROS);
+        video.setPublishedAt(originalPublishedAt);
+        video.setVisibility(Visibility.PRIVATE);
+        video.setStoragePrefix("private/" + video.getId());
+        video.setVisibilityTarget(Visibility.PUBLIC);
+        videoRepository.save(video);
+        TranscodeJob job = jobRepository.save(new TranscodeJob(video, clock.instant(), JobType.VISIBILITY_MIGRATION));
+
+        lifecycle.recordMigrationSuccess(job.getId(), video.getId(), "public/" + video.getId());
+
+        assertThat(videoRepository.findById(video.getId()).orElseThrow().getPublishedAt())
+                .isEqualTo(originalPublishedAt);
+    }
+
+    @Test
+    void recordMigrationTransientFailureReschedulesWithoutTouchingVideo() {
+        Video video = seedVideo();
+        video.setVisibilityTarget(Visibility.PRIVATE);
+        videoRepository.save(video);
+        TranscodeJob job = new TranscodeJob(video, clock.instant(), JobType.VISIBILITY_MIGRATION);
+        job.setAttempts(1);
+        job.setMaxAttempts(3);
+        jobRepository.save(job);
+
+        lifecycle.recordMigrationTransientFailure(job.getId(), "S3 copy failed");
+
+        TranscodeJob reloadedJob = jobRepository.findById(job.getId()).orElseThrow();
+        assertThat(reloadedJob.getStatus()).isEqualTo(JobStatus.PENDING);
+        assertThat(reloadedJob.getScheduledAt()).isAfter(clock.instant());
+
+        Video reloadedVideo = videoRepository.findById(video.getId()).orElseThrow();
+        assertThat(reloadedVideo.getStatus()).isNotEqualTo(VideoStatus.FAILED);
+        assertThat(reloadedVideo.getVisibility()).isEqualTo(video.getVisibility());
+
+        // Cleanup, see comment on requeueForRetranscodeResetsVideoAndInsertsFreshPendingJob.
+        jobRepository.delete(reloadedJob);
+    }
+
+    @Test
+    void recordMigrationTransientFailureExhaustedLeavesVideoUnaffected() {
+        Video video = seedVideo();
+        video.setVisibilityTarget(Visibility.PRIVATE);
+        videoRepository.save(video);
+        TranscodeJob job = new TranscodeJob(video, clock.instant(), JobType.VISIBILITY_MIGRATION);
+        job.setAttempts(3);
+        job.setMaxAttempts(3);
+        jobRepository.save(job);
+
+        lifecycle.recordMigrationTransientFailure(job.getId(), "S3 copy failed");
+
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
+
+        Video reloadedVideo = videoRepository.findById(video.getId()).orElseThrow();
+        assertThat(reloadedVideo.getStatus()).isNotEqualTo(VideoStatus.FAILED);
+        assertThat(reloadedVideo.getVisibility()).isEqualTo(Visibility.PUBLIC);
+        assertThat(reloadedVideo.getVisibilityTarget()).isEqualTo(Visibility.PRIVATE);
     }
 
     @Test

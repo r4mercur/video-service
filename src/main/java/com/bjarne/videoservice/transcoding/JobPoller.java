@@ -1,5 +1,6 @@
 package com.bjarne.videoservice.transcoding;
 
+import com.bjarne.videoservice.catalog.VisibilityMigrationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,11 +25,14 @@ public class JobPoller {
 
     private final TranscodeJobLifecycle lifecycle;
     private final TranscodeService transcodeService;
+    private final VisibilityMigrationService visibilityMigrationService;
     private final String workerId;
 
-    public JobPoller(TranscodeJobLifecycle lifecycle, TranscodeService transcodeService) {
+    public JobPoller(TranscodeJobLifecycle lifecycle, TranscodeService transcodeService,
+                      VisibilityMigrationService visibilityMigrationService) {
         this.lifecycle = lifecycle;
         this.transcodeService = transcodeService;
+        this.visibilityMigrationService = visibilityMigrationService;
         this.workerId = resolveHostname() + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
@@ -43,6 +47,14 @@ public class JobPoller {
         ClaimedJob job = claimed.get();
         log.info("Job {} for video {} claimed by {}", job.jobId(), job.videoId(), workerId);
 
+        if (job.type() == JobType.VISIBILITY_MIGRATION) {
+            processMigration(job);
+        } else {
+            processTranscode(job);
+        }
+    }
+
+    private void processTranscode(ClaimedJob job) {
         try {
             TranscodeOutcome outcome = transcodeService.process(job.videoId(), job.jobId());
             lifecycle.recordSuccess(job.jobId(), job.videoId(), outcome);
@@ -54,6 +66,17 @@ public class JobPoller {
         } catch (Exception e) {
             log.error("Job {} for video {} failed, may be retried", job.jobId(), job.videoId(), e);
             lifecycle.recordTransientFailure(job.jobId(), job.videoId(), String.valueOf(e.getMessage()));
+        }
+    }
+
+    private void processMigration(ClaimedJob job) {
+        try {
+            String newPrefix = visibilityMigrationService.migrate(job.videoId(), job.jobId());
+            lifecycle.recordMigrationSuccess(job.jobId(), job.videoId(), newPrefix);
+            log.info("Migration job {} for video {} completed successfully", job.jobId(), job.videoId());
+        } catch (Exception e) {
+            log.error("Migration job {} for video {} failed, may be retried", job.jobId(), job.videoId(), e);
+            lifecycle.recordMigrationTransientFailure(job.jobId(), String.valueOf(e.getMessage()));
         }
     }
 

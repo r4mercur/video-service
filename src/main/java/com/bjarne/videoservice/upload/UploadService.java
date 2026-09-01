@@ -114,7 +114,8 @@ public class UploadService {
         String lastError = latestJob.map(TranscodeJob::getLastError).orElse(null);
         int progressPercent = latestJob.map(TranscodeJob::getProgressPercent).orElse(0);
         String currentStep = latestJob.map(TranscodeJob::getCurrentStep).orElse(null);
-        return new VideoStatusResponse(video.getStatus(), lastError, progressPercent, currentStep);
+        return new VideoStatusResponse(video.getStatus(), video.getVisibilityTarget(), lastError, progressPercent,
+                currentStep);
     }
 
     private String buildUniqueSlug(String title) {

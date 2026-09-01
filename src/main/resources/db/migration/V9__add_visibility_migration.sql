@@ -1,0 +1,5 @@
+ALTER TABLE transcode_jobs
+    ADD COLUMN type VARCHAR(30) NOT NULL DEFAULT 'TRANSCODE';
+
+ALTER TABLE videos
+    ADD COLUMN visibility_target VARCHAR(10);

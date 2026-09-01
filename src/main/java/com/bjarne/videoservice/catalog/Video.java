@@ -41,6 +41,10 @@ public class Video {
     @Column(nullable = false)
     private Visibility visibility;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility_target")
+    private Visibility visibilityTarget;
+
     @Column(name = "duration_seconds")
     private Integer durationSeconds;
 
@@ -146,6 +150,14 @@ public class Video {
 
     public void setVisibility(Visibility visibility) {
         this.visibility = visibility;
+    }
+
+    public Visibility getVisibilityTarget() {
+        return visibilityTarget;
+    }
+
+    public void setVisibilityTarget(Visibility visibilityTarget) {
+        this.visibilityTarget = visibilityTarget;
     }
 
     public Integer getDurationSeconds() {

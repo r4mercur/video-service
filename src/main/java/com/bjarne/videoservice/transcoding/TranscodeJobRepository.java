@@ -20,6 +20,8 @@ public interface TranscodeJobRepository extends JpaRepository<TranscodeJob, Long
 
     List<TranscodeJob> findByStatusAndLockedAtBefore(JobStatus status, Instant cutoff);
 
+    boolean existsByVideoIdAndTypeAndStatusIn(UUID videoId, JobType type, List<JobStatus> statuses);
+
     /**
      * SKIP LOCKED (Postgres) via Hibernate's lock.timeout=-2: multiple worker instances can
      * poll in parallel without blocking each other or claiming the same job.
