@@ -44,6 +44,9 @@ public class CategoryAdminService {
         if (request.active() != null) {
             category.setActive(request.active());
         }
+        if (request.ageRestricted() != null) {
+            category.setAgeRestricted(request.ageRestricted());
+        }
         categoryRepository.save(category);
         return AdminCategoryDto.from(category);
     }

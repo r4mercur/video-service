@@ -1,10 +1,6 @@
 package com.bjarne.videoservice;
 
-import com.bjarne.videoservice.catalog.Category;
-import com.bjarne.videoservice.catalog.CategoryRepository;
-import com.bjarne.videoservice.catalog.Video;
-import com.bjarne.videoservice.catalog.VideoStatus;
-import com.bjarne.videoservice.catalog.Visibility;
+import com.bjarne.videoservice.catalog.*;
 import com.bjarne.videoservice.identity.User;
 import com.bjarne.videoservice.identity.UserRepository;
 import com.bjarne.videoservice.support.AbstractPostgresIntegrationTest;
@@ -31,8 +27,10 @@ class FlywayMigrationIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Test
     void categoriesAreSeededByFlyway() {
-        assertThat(categoryRepository.count()).isEqualTo(10);
+        // 10 from V2, plus the age-restricted "adult" category added in V10.
+        assertThat(categoryRepository.count()).isEqualTo(11);
         assertThat(categoryRepository.findBySlug("gaming")).isPresent();
+        assertThat(categoryRepository.findBySlug("adult")).isPresent();
     }
 
     @Test

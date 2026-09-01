@@ -29,24 +29,28 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
             WHERE v.status = com.bjarne.videoservice.catalog.VideoStatus.READY
               AND v.visibility = com.bjarne.videoservice.catalog.Visibility.PUBLIC
               AND (:categoryId IS NULL OR v.category.id = :categoryId)
+              AND (:includeAgeRestricted = true OR v.category.ageRestricted = false)
               AND (v.publishedAt < :cursorTs
                    OR (v.publishedAt = :cursorTs AND v.id < :cursorId))
             ORDER BY v.publishedAt DESC, v.id DESC
             """)
     List<Video> findPublicFeed(@Param("categoryId") Long categoryId, @Param("cursorTs") Instant cursorTs,
-                                @Param("cursorId") UUID cursorId, Pageable pageable);
+                                @Param("cursorId") UUID cursorId, @Param("includeAgeRestricted") boolean includeAgeRestricted,
+                                Pageable pageable);
 
     @Query("""
             SELECT v FROM Video v
             WHERE v.user.id = :userId
               AND v.status = com.bjarne.videoservice.catalog.VideoStatus.READY
               AND v.visibility = com.bjarne.videoservice.catalog.Visibility.PUBLIC
+              AND (:includeAgeRestricted = true OR v.category.ageRestricted = false)
               AND (v.publishedAt < :cursorTs
                    OR (v.publishedAt = :cursorTs AND v.id < :cursorId))
             ORDER BY v.publishedAt DESC, v.id DESC
             """)
     List<Video> findPublicByUser(@Param("userId") UUID userId, @Param("cursorTs") Instant cursorTs,
-                                  @Param("cursorId") UUID cursorId, Pageable pageable);
+                                  @Param("cursorId") UUID cursorId, @Param("includeAgeRestricted") boolean includeAgeRestricted,
+                                  Pageable pageable);
 
     @Query("""
             SELECT v FROM Video v

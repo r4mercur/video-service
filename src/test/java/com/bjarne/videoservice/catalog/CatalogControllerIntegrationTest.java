@@ -70,6 +70,51 @@ class CatalogControllerIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void categoriesExposesAgeRestrictedFlag() throws Exception {
+        mockMvc.perform(get("/api/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.slug=='gaming')].ageRestricted").value(false))
+                .andExpect(jsonPath("$[?(@.slug=='adult')].ageRestricted").value(true));
+    }
+
+    @Test
+    void feedExcludesAgeRestrictedCategoryByDefault() throws Exception {
+        User owner = registerUser();
+        Category adult = categoryRepository.findBySlug("adult").orElseThrow();
+        video(owner, adult, "Adult Video", VideoStatus.READY, Visibility.PUBLIC, Instant.now());
+
+        mockMvc.perform(get("/api/videos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void feedIncludesAgeRestrictedCategoryWhenOptedIn() throws Exception {
+        User owner = registerUser();
+        Category adult = categoryRepository.findBySlug("adult").orElseThrow();
+        Video adultVideo = video(owner, adult, "Adult Video", VideoStatus.READY, Visibility.PUBLIC, Instant.now());
+
+        mockMvc.perform(get("/api/videos").param("includeAgeRestricted", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].slug").value(adultVideo.getSlug()))
+                .andExpect(jsonPath("$.items[0].ageRestricted").value(true));
+    }
+
+    @Test
+    void detailIsReachableForAgeRestrictedVideoWithoutOptIn() throws Exception {
+        User owner = registerUser();
+        Category adult = categoryRepository.findBySlug("adult").orElseThrow();
+        Video adultVideo = video(owner, adult, "Adult Video", VideoStatus.READY, Visibility.PUBLIC, Instant.now());
+
+        // Direct link is not gated by the discovery-page filter (CLAUDE.md: this is a browse
+        // filter, not an access-control/age-verification mechanism).
+        mockMvc.perform(get("/api/videos/" + adultVideo.getSlug()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ageRestricted").value(true));
+    }
+
+    @Test
     void feedFiltersByCategory() throws Exception {
         User owner = registerUser();
         Instant now = Instant.now();
@@ -168,6 +213,35 @@ class CatalogControllerIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].slug").value(publicVideo.getSlug()));
+    }
+
+    @Test
+    void channelExcludesAgeRestrictedCategoryByDefault() throws Exception {
+        String email = "catalog-test-" + UUID.randomUUID() + "@example.com";
+        String username = "catalog-test-" + UUID.randomUUID();
+        registerAndLogin(email, username);
+        User owner = userRepository.findByEmail(email).orElseThrow();
+        Category adult = categoryRepository.findBySlug("adult").orElseThrow();
+        video(owner, adult, "Channel Adult", VideoStatus.READY, Visibility.PUBLIC, Instant.now());
+
+        mockMvc.perform(get("/api/users/" + username + "/videos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void channelIncludesAgeRestrictedCategoryWhenOptedIn() throws Exception {
+        String email = "catalog-test-" + UUID.randomUUID() + "@example.com";
+        String username = "catalog-test-" + UUID.randomUUID();
+        registerAndLogin(email, username);
+        User owner = userRepository.findByEmail(email).orElseThrow();
+        Category adult = categoryRepository.findBySlug("adult").orElseThrow();
+        Video adultVideo = video(owner, adult, "Channel Adult", VideoStatus.READY, Visibility.PUBLIC, Instant.now());
+
+        mockMvc.perform(get("/api/users/" + username + "/videos").param("includeAgeRestricted", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].slug").value(adultVideo.getSlug()));
     }
 
     private Video video(User owner, String title, VideoStatus status, Visibility visibility, Instant publishedAt) {

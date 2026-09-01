@@ -30,8 +30,9 @@ public class CatalogController {
     public CursorPage<VideoSummaryDto> feed(@RequestParam(required = false) String category,
                                              @RequestParam(required = false) String sort,
                                              @RequestParam(required = false) String cursor,
-                                             @RequestParam(required = false) Integer limit) {
-        return catalogService.feed(category, sort, cursor, limit);
+                                             @RequestParam(required = false) Integer limit,
+                                             @RequestParam(required = false, defaultValue = "false") boolean includeAgeRestricted) {
+        return catalogService.feed(category, sort, cursor, limit, includeAgeRestricted);
     }
 
     @GetMapping("/api/videos/{slug}")
@@ -50,8 +51,9 @@ public class CatalogController {
     @GetMapping("/api/users/{username}/videos")
     public CursorPage<VideoSummaryDto> channel(@PathVariable String username,
                                                 @RequestParam(required = false) String cursor,
-                                                @RequestParam(required = false) Integer limit) {
-        return catalogService.channel(username, cursor, limit);
+                                                @RequestParam(required = false) Integer limit,
+                                                @RequestParam(required = false, defaultValue = "false") boolean includeAgeRestricted) {
+        return catalogService.channel(username, cursor, limit, includeAgeRestricted);
     }
 
     private UUID viewerUserId(Jwt jwt) {

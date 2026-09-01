@@ -51,7 +51,8 @@ public class CatalogService {
                 .toList();
     }
 
-    public CursorPage<VideoSummaryDto> feed(String categorySlug, String sort, String cursor, Integer limit) {
+    public CursorPage<VideoSummaryDto> feed(String categorySlug, String sort, String cursor, Integer limit,
+                                             boolean includeAgeRestricted) {
         if (sort != null && !sort.equals("newest")) {
             throw new ValidationException("Unsupported sort value: " + sort);
         }
@@ -64,7 +65,7 @@ public class CatalogService {
         int pageSize = resolveLimit(limit);
         CursorCodec.Cursor decoded = decodeCursor(cursor);
         List<Video> videos = videoRepository.findPublicFeed(categoryId, decoded.timestamp(), decoded.id(),
-                PageRequest.of(0, pageSize + 1));
+                includeAgeRestricted, PageRequest.of(0, pageSize + 1));
         return buildPage(videos, pageSize, video -> VideoSummaryDto.from(video, urlResolver), Video::getPublishedAt);
     }
 
@@ -84,13 +85,14 @@ public class CatalogService {
         return buildPage(videos, pageSize, video -> VideoDetailDto.from(video, urlResolver), Video::getCreatedAt);
     }
 
-    public CursorPage<VideoSummaryDto> channel(String username, String cursor, Integer limit) {
+    public CursorPage<VideoSummaryDto> channel(String username, String cursor, Integer limit,
+                                                boolean includeAgeRestricted) {
         User owner = userRepository.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("User not found"));
         int pageSize = resolveLimit(limit);
         CursorCodec.Cursor decoded = decodeCursor(cursor);
         List<Video> videos = videoRepository.findPublicByUser(owner.getId(), decoded.timestamp(), decoded.id(),
-                PageRequest.of(0, pageSize + 1));
+                includeAgeRestricted, PageRequest.of(0, pageSize + 1));
         return buildPage(videos, pageSize, video -> VideoSummaryDto.from(video, urlResolver), Video::getPublishedAt);
     }
 

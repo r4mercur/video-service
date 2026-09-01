@@ -1,11 +1,6 @@
 package com.bjarne.videoservice.catalog;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "categories")
@@ -26,6 +21,9 @@ public class Category {
 
     @Column(nullable = false)
     private boolean active = true;
+
+    @Column(name = "age_restricted", nullable = false)
+    private boolean ageRestricted = false;
 
     protected Category() {
     }
@@ -70,5 +68,13 @@ public class Category {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public boolean isAgeRestricted() {
+        return ageRestricted;
+    }
+
+    public void setAgeRestricted(boolean ageRestricted) {
+        this.ageRestricted = ageRestricted;
     }
 }

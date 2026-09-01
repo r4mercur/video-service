@@ -230,6 +230,37 @@ class AdminControllerIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void categoryAdminCanFlagCategoryAsAgeRestricted() throws Exception {
+        String adminToken = adminToken();
+
+        String createResponse = mockMvc.perform(post("/api/admin/categories")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"slug":"nsfw-test","name":"NSFW Test","sortOrder":900}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ageRestricted").value(false))
+                .andReturn().getResponse().getContentAsString();
+        Long categoryId = ((Number) JsonPath.read(createResponse, "$.id")).longValue();
+
+        mockMvc.perform(patch("/api/admin/categories/" + categoryId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"ageRestricted":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ageRestricted").value(true))
+                .andExpect(jsonPath("$.active").value(true));
+
+        mockMvc.perform(get("/api/admin/categories")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.slug == 'nsfw-test')].ageRestricted").value(true));
+    }
+
+    @Test
     void createCategoryWithDuplicateSlugReturnsConflict() throws Exception {
         String adminToken = adminToken();
 
