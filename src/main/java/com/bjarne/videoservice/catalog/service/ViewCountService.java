@@ -32,8 +32,11 @@ public class ViewCountService {
     private final Counter countedViews;
     private final Counter deduplicatedViews;
 
-    public ViewCountService(VideoRepository videoRepository, VideoViewStatsRepository statsRepository,
-                             ViewCountProperties properties, Clock clock, MeterRegistry meterRegistry) {
+    public ViewCountService(VideoRepository videoRepository,
+                            VideoViewStatsRepository statsRepository,
+                            ViewCountProperties properties,
+                            Clock clock,
+                            MeterRegistry meterRegistry) {
         this.videoRepository = videoRepository;
         this.statsRepository = statsRepository;
         this.clock = clock;

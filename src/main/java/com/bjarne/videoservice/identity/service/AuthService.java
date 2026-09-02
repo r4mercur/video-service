@@ -39,9 +39,13 @@ public class AuthService {
     private final Counter loginFailureCounter;
     private final Counter refreshReuseCounter;
 
-    public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
-                        PasswordEncoder passwordEncoder, JwtService jwtService, AuthProperties properties,
-                        Clock clock, MeterRegistry meterRegistry) {
+    public AuthService(UserRepository userRepository,
+                       RefreshTokenRepository refreshTokenRepository,
+                       PasswordEncoder passwordEncoder,
+                       JwtService jwtService,
+                       AuthProperties properties,
+                       Clock clock,
+                       MeterRegistry meterRegistry) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;

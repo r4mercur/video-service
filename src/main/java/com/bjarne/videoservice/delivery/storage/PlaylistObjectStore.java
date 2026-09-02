@@ -30,8 +30,11 @@ public class PlaylistObjectStore {
     private final S3BucketInitializer bucketInitializer;
     private final Cache<String, String> cache;
 
-    public PlaylistObjectStore(S3Client s3Client, S3Properties s3Properties, S3BucketInitializer bucketInitializer,
-                                DeliveryProperties deliveryProperties, MeterRegistry meterRegistry) {
+    public PlaylistObjectStore(S3Client s3Client,
+                               S3Properties s3Properties,
+                               S3BucketInitializer bucketInitializer,
+                               DeliveryProperties deliveryProperties,
+                               MeterRegistry meterRegistry) {
         this.s3Client = s3Client;
         this.s3Properties = s3Properties;
         this.bucketInitializer = bucketInitializer;

@@ -23,8 +23,9 @@ public class VisibilityMigrationService {
     private final StoragePrefixMover storagePrefixMover;
     private final TranscodeProgressReporter progressReporter;
 
-    public VisibilityMigrationService(VideoRepository videoRepository, StoragePrefixMover storagePrefixMover,
-                                       TranscodeProgressReporter progressReporter) {
+    public VisibilityMigrationService(VideoRepository videoRepository,
+                                      StoragePrefixMover storagePrefixMover,
+                                      TranscodeProgressReporter progressReporter) {
         this.videoRepository = videoRepository;
         this.storagePrefixMover = storagePrefixMover;
         this.progressReporter = progressReporter;

@@ -31,8 +31,11 @@ public class PlaylistService {
     private final ObjectPresigner presigner;
     private final MediaUrlResolver urlResolver;
 
-    public PlaylistService(VideoRepository videoRepository, PlaylistObjectStore objectStore,
-                            PlaylistRewriter rewriter, ObjectPresigner presigner, MediaUrlResolver urlResolver) {
+    public PlaylistService(VideoRepository videoRepository,
+                           PlaylistObjectStore objectStore,
+                           PlaylistRewriter rewriter,
+                           ObjectPresigner presigner,
+                           MediaUrlResolver urlResolver) {
         this.videoRepository = videoRepository;
         this.objectStore = objectStore;
         this.rewriter = rewriter;

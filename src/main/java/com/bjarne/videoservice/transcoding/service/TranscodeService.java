@@ -52,9 +52,14 @@ public class TranscodeService {
     private final TranscodeProperties properties;
     private final TranscodeProgressReporter progressReporter;
 
-    public TranscodeService(VideoRepository videoRepository, ArtifactStorage artifactStorage, MediaProbe mediaProbe,
-                             RenditionPlanner renditionPlanner, HlsPackager hlsPackager, TranscodeProperties properties,
-                             TranscodeProgressReporter progressReporter) {
+    public TranscodeService(VideoRepository videoRepository,
+            ArtifactStorage artifactStorage,
+            MediaProbe mediaProbe,
+            RenditionPlanner renditionPlanner,
+            HlsPackager hlsPackager,
+            TranscodeProperties properties,
+            TranscodeProgressReporter progressReporter
+    ) {
         this.videoRepository = videoRepository;
         this.artifactStorage = artifactStorage;
         this.mediaProbe = mediaProbe;

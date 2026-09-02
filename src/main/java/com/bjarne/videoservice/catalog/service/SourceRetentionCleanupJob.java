@@ -33,8 +33,10 @@ public class SourceRetentionCleanupJob {
     private final TranscodeProperties properties;
     private final Clock clock;
 
-    public SourceRetentionCleanupJob(VideoRepository videoRepository, StoragePrefixMover storagePrefixMover,
-                                      TranscodeProperties properties, Clock clock) {
+    public SourceRetentionCleanupJob(VideoRepository videoRepository,
+                                     StoragePrefixMover storagePrefixMover,
+                                     TranscodeProperties properties,
+                                     Clock clock) {
         this.videoRepository = videoRepository;
         this.storagePrefixMover = storagePrefixMover;
         this.properties = properties;

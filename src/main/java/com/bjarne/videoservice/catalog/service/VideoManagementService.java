@@ -42,10 +42,14 @@ public class VideoManagementService {
     private final ThumbnailService thumbnailService;
     private final Clock clock;
 
-    public VideoManagementService(VideoRepository videoRepository, CategoryRepository categoryRepository,
-                                   ReportRepository reportRepository,
-                                   StoragePrefixMover storagePrefixMover, TranscodeJobRepository transcodeJobRepository,
-                                   MediaUrlResolver urlResolver, ThumbnailService thumbnailService, Clock clock) {
+    public VideoManagementService(VideoRepository videoRepository,
+                                  CategoryRepository categoryRepository,
+                                  ReportRepository reportRepository,
+                                  StoragePrefixMover storagePrefixMover,
+                                  TranscodeJobRepository transcodeJobRepository,
+                                  MediaUrlResolver urlResolver,
+                                  ThumbnailService thumbnailService,
+                                  Clock clock) {
         this.videoRepository = videoRepository;
         this.categoryRepository = categoryRepository;
         this.reportRepository = reportRepository;

@@ -50,9 +50,13 @@ public class ThumbnailService {
     private final FfmpegRunner ffmpegRunner;
     private final VideoRepository videoRepository;
 
-    public ThumbnailService(S3Client s3Client, S3Properties s3Properties, S3BucketInitializer bucketInitializer,
-                             TranscodeProperties transcodeProperties, ThumbnailProperties thumbnailProperties,
-                             FfmpegRunner ffmpegRunner, VideoRepository videoRepository) {
+    public ThumbnailService(S3Client s3Client,
+                            S3Properties s3Properties,
+                            S3BucketInitializer bucketInitializer,
+                            TranscodeProperties transcodeProperties,
+                            ThumbnailProperties thumbnailProperties,
+                            FfmpegRunner ffmpegRunner,
+                            VideoRepository videoRepository) {
         this.s3Client = s3Client;
         this.s3Properties = s3Properties;
         this.bucketInitializer = bucketInitializer;

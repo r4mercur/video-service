@@ -43,8 +43,10 @@ public class CatalogService {
     private final UserRepository userRepository;
     private final MediaUrlResolver urlResolver;
 
-    public CatalogService(VideoRepository videoRepository, CategoryRepository categoryRepository,
-                           UserRepository userRepository, MediaUrlResolver urlResolver) {
+    public CatalogService(VideoRepository videoRepository,
+                          CategoryRepository categoryRepository,
+                          UserRepository userRepository,
+                          MediaUrlResolver urlResolver) {
         this.videoRepository = videoRepository;
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
