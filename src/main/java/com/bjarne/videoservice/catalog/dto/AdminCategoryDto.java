@@ -1,0 +1,12 @@
+package com.bjarne.videoservice.catalog.dto;
+
+import com.bjarne.videoservice.catalog.entity.Category;
+
+public record AdminCategoryDto(Long id, String slug, String name, int sortOrder, boolean active,
+                                boolean ageRestricted) {
+
+    public static AdminCategoryDto from(Category category) {
+        return new AdminCategoryDto(category.getId(), category.getSlug(), category.getName(),
+                category.getSortOrder(), category.isActive(), category.isAgeRestricted());
+    }
+}

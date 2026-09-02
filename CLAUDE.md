@@ -144,23 +144,41 @@ dependencies {
 
 ## 5. Package structure
 
-Feature-based cuts, **not** `controller`/`service`/`repository` layer packages.
+**Feature first, then layer.** The top level is cut by feature. Inside each feature, classes are grouped into a fixed set of sub-packages so that a package with 30+ classes stays readable.
 
 ```
 com.bjarne.videoservice
-├── config/          SecurityConfig, S3Config, JacksonConfig, WorkerConfig
+├── config/          Spring configuration and all @ConfigurationProperties records
+│                    (SecurityConfig, S3Config, WorkerConfig, AuthProperties, S3Properties, …)
 ├── identity/        User, RefreshToken, AuthController, AuthService, JwtService
 ├── catalog/         Video, Category, VideoRepository, CatalogController, VisibilityPolicy
 ├── upload/          UploadController, UploadService, S3MultipartClient, UploadSession
 ├── transcoding/     TranscodeJob, JobPoller, FfmpegRunner, HlsPackager, MediaProbe
-├── storage/         ObjectStore, CachePolicy, VisibilityMigrator, LifecycleConfig
-├── moderation/      Report, ReportController, AdminController
-└── shared/          ApiError, CursorPage, exceptions, ClockConfig
+├── delivery/        PlaybackController, PlaylistService, ObjectPresigner
+├── moderation/      Report, ReportController, AdminController, AuditLog
+└── shared/          CursorPage, CursorCodec, GlobalExceptionHandler, exceptions, ClockConfig
 ```
 
-Spring Modulith to enforce the boundaries: introduce **only from AP5 onward** — earlier it just slows things down.
+### 5.1 Sub-packages inside a feature
 
-> `storage/` is new. It exists so that everything provider-adjacent — endpoint config, cache header policy, prefix moves, lifecycle rules — lives behind one boundary. That boundary is what makes §2.1's exception reversible in an afternoon.
+Every feature package uses the same sub-packages. A sub-package is only created when it has content; the feature root itself stays **empty**.
+
+| Sub-package | Contains | Rule of thumb |
+|---|---|---|
+| `dto/` | API contract records: `*Request`, `*Response`, `*Dto` | Used by `web/` and `service/`. Never a JPA entity. |
+| `entity/` | JPA entities, their enums (`VideoStatus`, `Visibility`, `JobType`), embeddable IDs | Domain model. Enums that live in a column belong here, not in `dto/`. |
+| `repository/` | Spring Data repositories | One interface per aggregate. |
+| `service/` | Services, scheduled jobs, policies, metrics, and the **internal value records** they produce (`MediaInfo`, `ClaimedJob`, `TranscodeOutcome`, `UpdateVideoResult`) | A record that never crosses the HTTP boundary is not a DTO and stays here. |
+| `storage/` | Components that call the AWS SDK directly (`S3MultipartClient`, `ArtifactStorage`, `PlaylistObjectStore`, `ObjectPresigner`, `StoragePrefixMover`) | Everything provider-adjacent lives here so §2.1's exception stays reversible. |
+| `web/` | Controllers | No business logic. |
+
+Naming: `*Request` for inbound and `*Response` for outbound API records. The older `*Dto` suffix is tolerated on existing classes; new classes use `Request`/`Response`.
+
+Tests mirror the package of the class under test (`catalog/service/VisibilityPolicyTest`, `upload/web/UploadControllerIntegrationTest`). Shared test infrastructure lives in `support/`.
+
+> **History.** The original rule here was "feature-based cuts, not layer packages". That was right while each feature had a handful of classes. It stopped being right once `catalog/` held 31 files in one directory — the layer split *inside* a feature is what brought the overview back. The top-level rule is unchanged: no cross-feature `controller/` or `service/` packages.
+
+> **Spring Modulith** (planned from AP5): Modulith treats only a module's root package as its public API and sub-packages as internal. Since the root packages are now empty, any type another feature needs (currently only entities, repositories and a few services) has to be exposed via `@NamedInterface` on its sub-package when Modulith is introduced. Until then, cross-feature imports are allowed and the sub-package layout is a readability convention, not an access boundary.
 
 ---
 

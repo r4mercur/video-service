@@ -1,7 +1,6 @@
 package com.bjarne.videoservice;
 
 import com.bjarne.videoservice.config.*;
-import com.bjarne.videoservice.identity.AuthProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

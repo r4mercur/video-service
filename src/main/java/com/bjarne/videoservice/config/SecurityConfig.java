@@ -1,6 +1,5 @@
 package com.bjarne.videoservice.config;
 
-import com.bjarne.videoservice.identity.AuthProperties;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;

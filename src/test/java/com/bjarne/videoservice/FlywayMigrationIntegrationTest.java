@@ -1,8 +1,12 @@
 package com.bjarne.videoservice;
 
-import com.bjarne.videoservice.catalog.*;
-import com.bjarne.videoservice.identity.User;
-import com.bjarne.videoservice.identity.UserRepository;
+import com.bjarne.videoservice.catalog.entity.Category;
+import com.bjarne.videoservice.catalog.entity.Video;
+import com.bjarne.videoservice.catalog.entity.VideoStatus;
+import com.bjarne.videoservice.catalog.entity.Visibility;
+import com.bjarne.videoservice.catalog.repository.CategoryRepository;
+import com.bjarne.videoservice.identity.entity.User;
+import com.bjarne.videoservice.identity.repository.UserRepository;
 import com.bjarne.videoservice.support.AbstractPostgresIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
