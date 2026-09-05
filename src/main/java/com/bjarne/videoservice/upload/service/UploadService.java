@@ -43,10 +43,15 @@ public class UploadService {
     private final Counter completedCounter;
     private final DistributionSummary uploadSizeSummary;
 
-    public UploadService(CategoryRepository categoryRepository, VideoRepository videoRepository,
-                          UserRepository userRepository, UploadSessionRepository uploadSessionRepository,
-                          TranscodeJobRepository transcodeJobRepository, S3MultipartClient s3MultipartClient,
-                          UploadProperties properties, Clock clock, MeterRegistry meterRegistry) {
+    public UploadService(CategoryRepository categoryRepository,
+                         VideoRepository videoRepository,
+                         UserRepository userRepository,
+                         UploadSessionRepository uploadSessionRepository,
+                         TranscodeJobRepository transcodeJobRepository,
+                         S3MultipartClient s3MultipartClient,
+                         UploadProperties properties,
+                         Clock clock,
+                         MeterRegistry meterRegistry) {
         this.categoryRepository = categoryRepository;
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;

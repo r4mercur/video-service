@@ -32,8 +32,11 @@ public class UploadCleanupJob {
     private final Clock clock;
     private final Counter abortedCounter;
 
-    public UploadCleanupJob(UploadSessionRepository uploadSessionRepository, VideoRepository videoRepository,
-                             S3MultipartClient s3MultipartClient, Clock clock, MeterRegistry meterRegistry) {
+    public UploadCleanupJob(UploadSessionRepository uploadSessionRepository,
+                            VideoRepository videoRepository,
+                            S3MultipartClient s3MultipartClient,
+                            Clock clock,
+                            MeterRegistry meterRegistry) {
         this.uploadSessionRepository = uploadSessionRepository;
         this.videoRepository = videoRepository;
         this.s3MultipartClient = s3MultipartClient;

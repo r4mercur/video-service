@@ -27,8 +27,10 @@ public class S3MultipartClient {
     private final S3Properties properties;
     private final S3BucketInitializer bucketInitializer;
 
-    public S3MultipartClient(S3Client s3Client, S3Presigner s3Presigner, S3Properties properties,
-                              S3BucketInitializer bucketInitializer) {
+    public S3MultipartClient(S3Client s3Client,
+                             S3Presigner s3Presigner,
+                             S3Properties properties,
+                             S3BucketInitializer bucketInitializer) {
         this.s3Client = s3Client;
         this.s3Presigner = s3Presigner;
         this.properties = properties;

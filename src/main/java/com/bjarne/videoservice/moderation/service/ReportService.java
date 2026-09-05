@@ -25,8 +25,10 @@ public class ReportService {
     private final ReportRepository reportRepository;
     private final RateLimiter rateLimiter;
 
-    public ReportService(VideoRepository videoRepository, UserRepository userRepository,
-                          ReportRepository reportRepository, RateLimiter rateLimiter) {
+    public ReportService(VideoRepository videoRepository,
+                         UserRepository userRepository,
+                         ReportRepository reportRepository,
+                         RateLimiter rateLimiter) {
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.reportRepository = reportRepository;

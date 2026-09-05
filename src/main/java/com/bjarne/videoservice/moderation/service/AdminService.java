@@ -46,8 +46,11 @@ public class AdminService {
     private final UserRepository userRepository;
     private final Clock clock;
 
-    public AdminService(VideoRepository videoRepository, ReportRepository reportRepository,
-                         AuditLogRepository auditLogRepository, UserRepository userRepository, Clock clock) {
+    public AdminService(VideoRepository videoRepository,
+                        ReportRepository reportRepository,
+                        AuditLogRepository auditLogRepository,
+                        UserRepository userRepository,
+                        Clock clock) {
         this.videoRepository = videoRepository;
         this.reportRepository = reportRepository;
         this.auditLogRepository = auditLogRepository;

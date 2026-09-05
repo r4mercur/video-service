@@ -39,8 +39,10 @@ public class JobPoller {
     private final MeterRegistry meterRegistry;
     private final String workerId;
 
-    public JobPoller(TranscodeJobLifecycle lifecycle, TranscodeService transcodeService,
-                      VisibilityMigrationService visibilityMigrationService, MeterRegistry meterRegistry) {
+    public JobPoller(TranscodeJobLifecycle lifecycle,
+                     TranscodeService transcodeService,
+                     VisibilityMigrationService visibilityMigrationService,
+                     MeterRegistry meterRegistry) {
         this.lifecycle = lifecycle;
         this.transcodeService = transcodeService;
         this.visibilityMigrationService = visibilityMigrationService;

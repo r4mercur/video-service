@@ -40,9 +40,11 @@ public class TranscodeJobLifecycle {
     private final TranscodeProperties properties;
     private final Clock clock;
 
-    public TranscodeJobLifecycle(TranscodeJobRepository jobRepository, VideoRepository videoRepository,
-                                  VideoRenditionRepository videoRenditionRepository, TranscodeProperties properties,
-                                  Clock clock) {
+    public TranscodeJobLifecycle(TranscodeJobRepository jobRepository,
+                                 VideoRepository videoRepository,
+                                 VideoRenditionRepository videoRenditionRepository,
+                                 TranscodeProperties properties,
+                                 Clock clock) {
         this.jobRepository = jobRepository;
         this.videoRepository = videoRepository;
         this.videoRenditionRepository = videoRenditionRepository;
@@ -79,7 +81,7 @@ public class TranscodeJobLifecycle {
         }
         jobRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId)
                 .filter(job -> job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.RUNNING)
-                .ifPresent(job -> {
+                .ifPresent(_ -> {
                     throw new ConflictException("A transcode job is already running for this video: " + videoId);
                 });
 
@@ -96,7 +98,7 @@ public class TranscodeJobLifecycle {
         if (claimable.isEmpty()) {
             return Optional.empty();
         }
-        TranscodeJob job = claimable.get(0);
+        TranscodeJob job = claimable.getFirst();
         job.setStatus(JobStatus.RUNNING);
         job.setLockedAt(clock.instant());
         job.setLockedBy(workerId);
