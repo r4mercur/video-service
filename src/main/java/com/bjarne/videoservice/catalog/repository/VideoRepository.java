@@ -22,6 +22,9 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     List<Video> findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBefore(Instant cutoff);
 
+    /** Videos that have storage objects, i.e. everything a CACHE_METADATA_BACKFILL can apply to. */
+    List<Video> findByStoragePrefixIsNotNull();
+
     /*
      * cursorTs/cursorId are never null (CatalogService passes an "infinitely far in the future"
      * sentinel when there's no cursor) - a ":cursorTs IS NULL OR ..." branch would prevent

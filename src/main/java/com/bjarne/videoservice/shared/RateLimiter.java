@@ -23,30 +23,36 @@ public class RateLimiter {
     private final RateLimitProperties.Limit registerLimit;
     private final RateLimitProperties.Limit reportLimit;
     private final RateLimitProperties.Limit reportAnonymousLimit;
+    private final RateLimitProperties.Limit playbackTelemetryLimit;
 
     private final Cache<String, Bucket> loginBuckets;
     private final Cache<String, Bucket> registerBuckets;
     private final Cache<String, Bucket> reportBuckets;
     private final Cache<String, Bucket> reportAnonymousBuckets;
+    private final Cache<String, Bucket> playbackTelemetryBuckets;
 
     private final Counter loginRejections;
     private final Counter registerRejections;
     private final Counter reportRejections;
     private final Counter reportAnonymousRejections;
+    private final Counter playbackTelemetryRejections;
 
     public RateLimiter(RateLimitProperties properties, MeterRegistry meterRegistry) {
         this.loginLimit = properties.login();
         this.registerLimit = properties.register();
         this.reportLimit = properties.report();
         this.reportAnonymousLimit = properties.reportAnonymous();
+        this.playbackTelemetryLimit = properties.playbackTelemetry();
         this.loginBuckets = buildCache(loginLimit);
         this.registerBuckets = buildCache(registerLimit);
         this.reportBuckets = buildCache(reportLimit);
         this.reportAnonymousBuckets = buildCache(reportAnonymousLimit);
+        this.playbackTelemetryBuckets = buildCache(playbackTelemetryLimit);
         this.loginRejections = rejectionCounter(meterRegistry, "login");
         this.registerRejections = rejectionCounter(meterRegistry, "register");
         this.reportRejections = rejectionCounter(meterRegistry, "report");
         this.reportAnonymousRejections = rejectionCounter(meterRegistry, "report_anonymous");
+        this.playbackTelemetryRejections = rejectionCounter(meterRegistry, "playback_telemetry");
     }
 
     public boolean tryConsumeLogin(String ip) {
@@ -63,6 +69,14 @@ public class RateLimiter {
 
     public boolean tryConsumeReportAnonymous(String ip) {
         return tryConsume(reportAnonymousBuckets, ip, reportAnonymousLimit, reportAnonymousRejections);
+    }
+
+    /**
+     * Keyed by IP: playback telemetry is accepted from anonymous viewers, because watching needs
+     * no account (CLAUDE.md 1) and telemetry from logged-out viewers is exactly as valuable.
+     */
+    public boolean tryConsumePlaybackTelemetry(String ip) {
+        return tryConsume(playbackTelemetryBuckets, ip, playbackTelemetryLimit, playbackTelemetryRejections);
     }
 
     private boolean tryConsume(Cache<String, Bucket> cache, String key, RateLimitProperties.Limit limit,

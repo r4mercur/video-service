@@ -16,7 +16,8 @@ class RateLimiterTest {
             new RateLimitProperties.Limit(2, Duration.ofMinutes(15)),
             new RateLimitProperties.Limit(1, Duration.ofHours(1)),
             new RateLimitProperties.Limit(3, Duration.ofHours(1)),
-            new RateLimitProperties.Limit(1, Duration.ofHours(1))), meterRegistry);
+            new RateLimitProperties.Limit(1, Duration.ofHours(1)),
+            new RateLimitProperties.Limit(4, Duration.ofMinutes(5))), meterRegistry);
 
     @Test
     void allowsUpToCapacityThenDeniesForSameKey() {

@@ -54,6 +54,51 @@ groups:
           summary: "More than 5% of HTTP requests return 5xx"
           description: "5xx ratio has been above 5% for 5 minutes (with non-trivial traffic)."
 
+      # --- Delivery (AP6/9.3) -------------------------------------------------------------
+      # Segments are fetched by the browser straight from object storage, so HighHttp5xxRate
+      # below cannot see them: during the September 2026 incident the origin was answering in
+      # 6-11 s and returning the occasional 503 while every application-side metric stayed
+      # green. These two rules are what make that visible without a user complaining.
+      #
+      # 4 s is the segment duration (HlsPackager -hls_time 4), i.e. the wall-clock budget to
+      # fetch one segment while playing one. p95 at half that is already a video that stutters
+      # for a meaningful share of viewers, which is why the threshold sits at 2 s rather than 4.
+      - alert: MediaOriginSlow
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le) (rate(videoservice_delivery_origin_request_seconds_bucket[15m]))) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Object storage origin is responding slowly"
+          description: "p95 latency to the media origin is {{ $value }}s. Segments are 4s long - above ~2s, playback stalls for many viewers. Application metrics will look healthy regardless; check the storage provider."
+
+      # Distinct from slowness: the origin is refusing or unreachable. Segments simply fail.
+      - alert: MediaOriginFailing
+        expr: >
+          sum(rate(videoservice_delivery_origin_request_seconds_count{outcome!="ok"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Media origin probe is failing"
+          description: "The synthetic probe against the media origin has been failing (timeout, transport error or 5xx) for 10 minutes. Playback is likely broken for everyone."
+
+      # Real viewers, from hls.js. Deliberately kept alongside the synthetic probe rather than
+      # replacing it: if this fires while MediaOriginSlow stays quiet, the origin is fine and
+      # the problem lies between it and the audience.
+      - alert: ViewerPlaybackStalling
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le) (rate(videoservice_playback_fragment_load_seconds_bucket[15m]))) > 4
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Viewers are waiting longer than one segment duration per segment"
+          description: "p95 segment load time reported by players is {{ $value }}s against a 4s segment budget - buffers are draining faster than they fill."
+
       # Zero-tolerance: a single reuse means a refresh token was presented twice (CLAUDE.md 8
       # reuse detection) - replayed/stolen token or a badly broken client, either way worth a look.
       - alert: RefreshTokenReuseDetected

@@ -7,6 +7,7 @@ import com.bjarne.videoservice.config.S3Properties;
 import com.bjarne.videoservice.config.ThumbnailProperties;
 import com.bjarne.videoservice.config.TranscodeProperties;
 import com.bjarne.videoservice.shared.exceptions.ValidationException;
+import com.bjarne.videoservice.shared.storage.CachePolicy;
 import com.bjarne.videoservice.transcoding.service.FfmpegRunner;
 import com.bjarne.videoservice.transcoding.service.TranscodeProcessException;
 import org.springframework.stereotype.Component;
@@ -49,6 +50,7 @@ public class ThumbnailService {
     private final ThumbnailProperties thumbnailProperties;
     private final FfmpegRunner ffmpegRunner;
     private final VideoRepository videoRepository;
+    private final CachePolicy cachePolicy;
 
     public ThumbnailService(S3Client s3Client,
                             S3Properties s3Properties,
@@ -56,7 +58,8 @@ public class ThumbnailService {
                             TranscodeProperties transcodeProperties,
                             ThumbnailProperties thumbnailProperties,
                             FfmpegRunner ffmpegRunner,
-                            VideoRepository videoRepository) {
+                            VideoRepository videoRepository,
+                            CachePolicy cachePolicy) {
         this.s3Client = s3Client;
         this.s3Properties = s3Properties;
         this.bucketInitializer = bucketInitializer;
@@ -64,6 +67,7 @@ public class ThumbnailService {
         this.thumbnailProperties = thumbnailProperties;
         this.ffmpegRunner = ffmpegRunner;
         this.videoRepository = videoRepository;
+        this.cachePolicy = cachePolicy;
     }
 
     @Transactional
@@ -87,10 +91,14 @@ public class ThumbnailService {
 
             String key = video.getStoragePrefix() + "/thumbnail_custom.jpg";
             bucketInitializer.ensureReady();
+            // A thumbnail is replaced in place under this exact key, so it must never carry the
+            // segment policy's year-long immutable cache (CLAUDE.md 9.4) - CachePolicy returns
+            // SHORT_LIVED for .jpg, and ThumbnailServiceCacheHeaderTest asserts it on the request.
             s3Client.putObject(PutObjectRequest.builder()
                     .bucket(s3Properties.bucket())
                     .key(key)
                     .contentType("image/jpeg")
+                    .cacheControl(cachePolicy.cacheControlFor(key))
                     .build(), RequestBody.fromFile(output));
 
             video.setThumbnailKey(key);

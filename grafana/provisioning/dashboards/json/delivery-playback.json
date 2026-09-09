@@ -1,0 +1,287 @@
+{
+  "uid": "vs-delivery-playback",
+  "title": "Delivery & Playback",
+  "tags": ["video-service"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "What this dashboard covers",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "Browsers fetch segments **directly from object storage** - Caddy and the JVM are deliberately not in the media data path (CLAUDE.md 9.3). No `http_server_requests` metric can see a single segment, so this dashboard is the only place delivery problems show up.\n\n**Origin latency** is a synthetic probe from the server. **Playback** panels are real viewers, reported by hls.js. With 4-second segments, a segment load approaching 4 s means the buffer drains faster than it fills and playback will stall."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Origin latency (p95)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(videoservice_delivery_origin_request_seconds_bucket[15m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Origin probe failures (1h)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(videoservice_delivery_origin_request_seconds_count{outcome!=\"ok\"}[1h]))",
+          "legendFormat": "failures"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Viewer segment load (p95)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(videoservice_playback_fragment_load_seconds_bucket[15m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "red", "value": 4 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Stalls (1h)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(videoservice_playback_stalls_total[1h]))",
+          "legendFormat": "stalls"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Origin request latency (synthetic probe)",
+      "description": "Round-trip against the media origin from the server. A 4 s segment budget is the reference line: sustained latency near or above it makes stall-free playback impossible no matter what the viewer's bandwidth is.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(videoservice_delivery_origin_request_seconds_bucket[10m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(videoservice_delivery_origin_request_seconds_bucket[10m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(videoservice_delivery_origin_request_seconds_bucket[10m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Origin probe outcomes (per hour)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(videoservice_delivery_origin_request_seconds_count[1h]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Viewer segment load time by rendition",
+      "description": "What hls.js actually measured. Diverging from the synthetic probe means the problem sits between the origin and viewers rather than at the origin.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, height) (rate(videoservice_playback_fragment_load_seconds_bucket[10m])))",
+          "legendFormat": "p95 {{height}}p"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Viewer throughput by rendition",
+      "description": "Effective per-segment throughput as seen by the player. Compare against the declared ladder bitrate (360p 800, 720p 2500, 1080p 4500 kbit/s) - below it, ABR will keep shifting down.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (height) (rate(videoservice_playback_fragment_throughput_sum[10m])) / sum by (height) (rate(videoservice_playback_fragment_throughput_count[10m]))",
+          "legendFormat": "{{height}}p"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Kbits",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Stalls and segment errors (per hour)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (height) (increase(videoservice_playback_stalls_total[1h]))",
+          "legendFormat": "stalls {{height}}p"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (height) (increase(videoservice_playback_fragment_errors_total[1h]))",
+          "legendFormat": "errors {{height}}p"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Time to first frame (p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(videoservice_playback_startup_seconds_bucket[10m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

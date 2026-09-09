@@ -260,7 +260,9 @@ New columns and their reasons:
 | GET | `/api/videos/{id}/manifest` | optional | Playlist URL (signed for `PRIVATE`) |
 | POST | `/api/videos/{id}/report` | optional | Report; anonymous allowed (DSA notice-and-action), IP-rate-limited stricter than logged-in |
 | POST | `/api/videos/{id}/view` | – | View counting, deduplicated |
+| POST | `/api/playback/telemetry` | – | Real-user playback metrics from hls.js; anonymous, IP-rate-limited (§9.6) |
 | GET/POST | `/api/admin/**` | ADMIN | Categories, reports, bans |
+| POST | `/api/admin/videos/cache-metadata-backfill` | ADMIN | One-off: re-stamp `Cache-Control` on objects uploaded before `CachePolicy` existed (§9.3) |
 
 > For someone else's `PRIVATE` video: **404, not 403** — 403 would confirm the video's existence.
 
@@ -413,6 +415,25 @@ It therefore runs as a background job, never in a request thread:
 **Idempotency is the hard requirement here.** The job must be safe to retry from any point. Copy-then-verify-then-delete, never delete-then-copy, and never assume a partially migrated prefix is empty.
 
 > A `PRIVATE → PUBLIC` migration is also the moment a video first becomes publicly reachable. Step 4 is therefore the publication event — `published_at` is set there, not in the `PATCH` handler.
+
+### 9.6 Delivery observability
+
+§9.3's decision to keep Caddy and the JVM out of the media data path has one cost that was not written down when it was made: **the application cannot see a single media request.** No `http_server_requests` metric covers segments, so an origin returning 503s and taking seconds per segment leaves every application-side dashboard green and fires no alert. That is not hypothetical — it happened in September 2026 and was found only because someone watched a video and complained.
+
+Two independent signals close that gap, and they are deliberately kept separate:
+
+| Signal | Source | Answers |
+|---|---|---|
+| `videoservice_delivery_origin_request_seconds` | `DeliveryOriginProbe`, a synthetic request against `storage.public-base-url` on a timer | Is the origin healthy, from inside the data centre? |
+| `videoservice_playback_*` | `POST /api/playback/telemetry`, fed by hls.js in the browser | What do viewers actually experience? |
+
+Neither replaces the other. Agreement means the origin is the bottleneck; **probe fast while viewers are slow means the problem sits between them** — a distinction that decides whether the fix is at the storage provider or in the delivery topology.
+
+**The frontend must source telemetry from hls.js's own fragment stats, not from the Resource Timing API.** Object storage sends no `Timing-Allow-Origin` header, so for these cross-origin requests the browser zeroes out `transferSize` and the timing breakdown — measured against production, every segment reported `transferSize: 0` and `responseStart == requestStart`. S3 has no way to add that header to object responses, so hls.js, which times its own XHRs, is the only source that has real numbers. (Frontend repo work; the ingest endpoint and its metrics live here.)
+
+⚠️ The telemetry endpoint is anonymous, because watching needs no account (§1) and a metric covering only logged-in viewers would miss most of the audience. That makes **tag cardinality a security property, not a style question**: every tag value becomes a permanent Prometheus series. No video id, no user id, no free-form strings — the only tag is rendition height, folded onto the known ladder so an invented value cannot mint a new series.
+
+**Reference points for reading the numbers:** segments are 4 s (`HlsPackager -hls_time 4`), so a segment must arrive in under 4 s to sustain playback — p95 approaching that means buffers drain faster than they fill. The ladder's declared bandwidths (360p 800, 720p 2500, 1080p 4500 kbit/s) are the comparison for viewer throughput; sustained below the lowest rung, ABR has nowhere left to shift down to.
 
 ---
 

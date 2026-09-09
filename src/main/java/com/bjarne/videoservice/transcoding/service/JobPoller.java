@@ -1,5 +1,6 @@
 package com.bjarne.videoservice.transcoding.service;
 
+import com.bjarne.videoservice.catalog.service.CacheMetadataBackfillService;
 import com.bjarne.videoservice.catalog.service.VisibilityMigrationService;
 import com.bjarne.videoservice.transcoding.entity.JobType;
 import io.micrometer.core.instrument.Counter;
@@ -36,16 +37,19 @@ public class JobPoller {
     private final TranscodeJobLifecycle lifecycle;
     private final TranscodeService transcodeService;
     private final VisibilityMigrationService visibilityMigrationService;
+    private final CacheMetadataBackfillService cacheMetadataBackfillService;
     private final MeterRegistry meterRegistry;
     private final String workerId;
 
     public JobPoller(TranscodeJobLifecycle lifecycle,
                      TranscodeService transcodeService,
                      VisibilityMigrationService visibilityMigrationService,
+                     CacheMetadataBackfillService cacheMetadataBackfillService,
                      MeterRegistry meterRegistry) {
         this.lifecycle = lifecycle;
         this.transcodeService = transcodeService;
         this.visibilityMigrationService = visibilityMigrationService;
+        this.cacheMetadataBackfillService = cacheMetadataBackfillService;
         this.meterRegistry = meterRegistry;
         this.workerId = resolveHostname() + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
@@ -61,10 +65,10 @@ public class JobPoller {
         ClaimedJob job = claimed.get();
         log.info("Job {} for video {} claimed by {}", job.jobId(), job.videoId(), workerId);
 
-        if (job.type() == JobType.VISIBILITY_MIGRATION) {
-            processMigration(job);
-        } else {
-            processTranscode(job);
+        switch (job.type()) {
+            case VISIBILITY_MIGRATION -> processMigration(job);
+            case CACHE_METADATA_BACKFILL -> processCacheMetadataBackfill(job);
+            case TRANSCODE -> processTranscode(job);
         }
     }
 
@@ -97,6 +101,22 @@ public class JobPoller {
         } catch (Exception e) {
             log.error("Migration job {} for video {} failed, may be retried", job.jobId(), job.videoId(), e);
             lifecycle.recordMigrationTransientFailure(job.jobId(), String.valueOf(e.getMessage()));
+            recordProcessed(job, start, "failed_transient");
+        }
+    }
+
+    private void processCacheMetadataBackfill(ClaimedJob job) {
+        long start = System.nanoTime();
+        try {
+            int rewritten = cacheMetadataBackfillService.backfill(job.videoId(), job.jobId());
+            lifecycle.recordBackfillSuccess(job.jobId());
+            recordProcessed(job, start, "success");
+            log.info("Cache metadata backfill job {} rewrote {} object(s) for video {}",
+                    job.jobId(), rewritten, job.videoId());
+        } catch (Exception e) {
+            log.error("Cache metadata backfill job {} for video {} failed, may be retried",
+                    job.jobId(), job.videoId(), e);
+            lifecycle.recordBackfillFailure(job.jobId(), String.valueOf(e.getMessage()));
             recordProcessed(job, start, "failed_transient");
         }
     }

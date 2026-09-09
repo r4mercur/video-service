@@ -214,7 +214,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/categories", "/api/videos", "/api/videos/*",
                                 "/api/users/*/videos", "/api/videos/*/manifest", "/api/videos/*/master.m3u8",
                                 "/api/videos/*/*/playlist.m3u8").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/videos/*/view", "/api/videos/*/report").permitAll()
+                        // Playback telemetry is anonymous for the same reason view counting is:
+                        // watching needs no account (CLAUDE.md 1), so requiring one would blind
+                        // the metric to most of the audience. Rate-limited per IP in RateLimiter.
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/view", "/api/videos/*/report",
+                                "/api/playback/telemetry").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )

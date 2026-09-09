@@ -2,6 +2,8 @@ package com.bjarne.videoservice.transcoding.storage;
 
 import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
+import com.bjarne.videoservice.shared.storage.CachePolicy;
+import com.bjarne.videoservice.shared.storage.StorageContentType;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -24,11 +26,16 @@ public class ArtifactStorage {
     private final S3Client s3Client;
     private final S3Properties properties;
     private final S3BucketInitializer bucketInitializer;
+    private final CachePolicy cachePolicy;
+    private final StorageContentType contentType;
 
-    public ArtifactStorage(S3Client s3Client, S3Properties properties, S3BucketInitializer bucketInitializer) {
+    public ArtifactStorage(S3Client s3Client, S3Properties properties, S3BucketInitializer bucketInitializer,
+                           CachePolicy cachePolicy, StorageContentType contentType) {
         this.s3Client = s3Client;
         this.properties = properties;
         this.bucketInitializer = bucketInitializer;
+        this.cachePolicy = cachePolicy;
+        this.contentType = contentType;
     }
 
     public void downloadObject(String key, Path destination) {
@@ -52,21 +59,8 @@ public class ArtifactStorage {
         s3Client.putObject(PutObjectRequest.builder()
                 .bucket(properties.bucket())
                 .key(key)
-                .contentType(contentTypeFor(file))
+                .contentType(contentType.forKey(key))
+                .cacheControl(cachePolicy.cacheControlFor(key))
                 .build(), RequestBody.fromFile(file));
-    }
-
-    private String contentTypeFor(Path file) {
-        String name = file.getFileName().toString();
-        if (name.endsWith(".m3u8")) {
-            return "application/vnd.apple.mpegurl";
-        }
-        if (name.endsWith(".m4s") || name.endsWith(".mp4")) {
-            return "video/mp4";
-        }
-        if (name.endsWith(".jpg")) {
-            return "image/jpeg";
-        }
-        return "application/octet-stream";
     }
 }

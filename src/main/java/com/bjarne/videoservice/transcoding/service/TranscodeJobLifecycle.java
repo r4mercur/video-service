@@ -183,6 +183,47 @@ public class TranscodeJobLifecycle {
                 rendition.setPlaylistKey(StoragePrefixMover.rewriteKey(rendition.getPlaylistKey(), oldPrefix, newPrefix)));
     }
 
+    /**
+     * Queues a CACHE_METADATA_BACKFILL job for every video that has storage objects, skipping any
+     * video that already has one pending or running so a repeated call doesn't pile up duplicate
+     * work. One job per video rather than a single sweeping job: the queue's retry, backoff and
+     * SKIP LOCKED machinery then applies per video, and a failure on one video doesn't force the
+     * others to be redone.
+     *
+     * @return the number of jobs actually enqueued
+     */
+    @Transactional
+    public int enqueueCacheMetadataBackfill() {
+        int enqueued = 0;
+        for (Video video : videoRepository.findByStoragePrefixIsNotNull()) {
+            boolean alreadyQueued = jobRepository.existsByVideoIdAndTypeAndStatusIn(
+                    video.getId(), JobType.CACHE_METADATA_BACKFILL, List.of(JobStatus.PENDING, JobStatus.RUNNING));
+            if (!alreadyQueued) {
+                jobRepository.save(new TranscodeJob(video, clock.instant(), JobType.CACHE_METADATA_BACKFILL));
+                enqueued++;
+            }
+        }
+        return enqueued;
+    }
+
+    @Transactional
+    public void recordBackfillSuccess(Long jobId) {
+        TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));
+        job.setStatus(JobStatus.DONE);
+        jobRepository.save(job);
+    }
+
+    /**
+     * Like {@link #recordMigrationTransientFailure}, a failed backfill must not touch the video:
+     * its objects are exactly as they were, just still missing the metadata. The video stays
+     * READY and keeps playing.
+     */
+    @Transactional
+    public void recordBackfillFailure(Long jobId, String error) {
+        TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));
+        requeueOrFail(job, error);
+    }
+
     @Transactional
     public void recordMigrationTransientFailure(Long jobId, String error) {
         TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));

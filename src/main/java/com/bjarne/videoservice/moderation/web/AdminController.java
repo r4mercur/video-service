@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -68,6 +69,18 @@ public class AdminController {
     public ResponseEntity<Void> retranscodeVideo(@PathVariable UUID id) {
         transcodeJobLifecycle.requeueForRetranscode(id);
         return ResponseEntity.accepted().build();
+    }
+
+    /**
+     * One-off maintenance for videos uploaded before CachePolicy existed: their storage objects
+     * carry no Cache-Control (CLAUDE.md 9.3). Enqueues one background job per video - the work is
+     * one storage round-trip per object, far too slow for a request thread. Safe to call twice;
+     * videos with a backfill already queued are skipped, and the job itself is idempotent.
+     */
+    @PostMapping("/api/admin/videos/cache-metadata-backfill")
+    public ResponseEntity<Map<String, Integer>> backfillCacheMetadata() {
+        return ResponseEntity.accepted()
+                .body(Map.of("enqueuedJobs", transcodeJobLifecycle.enqueueCacheMetadataBackfill()));
     }
 
     @GetMapping("/api/admin/reports")

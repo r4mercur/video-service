@@ -2,6 +2,8 @@ package com.bjarne.videoservice.catalog.storage;
 
 import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
+import com.bjarne.videoservice.shared.storage.CachePolicy;
+import com.bjarne.videoservice.shared.storage.StorageContentType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -11,6 +13,7 @@ import software.amazon.awssdk.services.s3.model.*;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,6 +37,8 @@ class StoragePrefixMoverTest {
     private static final String OLD_PREFIX = "private/5c4edc5e-e24e-4917-85a5-276cb038f4fb";
     private static final String NEW_PREFIX = "public/5c4edc5e-e24e-4917-85a5-276cb038f4fb";
     private static final String BUCKET = "video-service-test";
+    private static final CachePolicy CACHE_POLICY = new CachePolicy();
+    private static final StorageContentType CONTENT_TYPE = new StorageContentType();
 
     @Mock
     private S3Client s3Client;
@@ -47,7 +52,7 @@ class StoragePrefixMoverTest {
 
     @Test
     void deleteAllThrowsWhenObjectsRemainAfterDelete() {
-        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
 
         // Every listObjectsV2 call - before and after the delete - still reports the same
         // object, simulating a delete that silently didn't clear the prefix (e.g. a listing
@@ -68,7 +73,7 @@ class StoragePrefixMoverTest {
 
     @Test
     void deleteAllSucceedsWhenPrefixIsActuallyEmptyAfterDelete() {
-        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
 
         // First call (before delete) finds the object, second call (the new verification
         // re-list) confirms it is really gone.
@@ -86,7 +91,7 @@ class StoragePrefixMoverTest {
 
     @Test
     void deleteAllIsANoOpWhenPrefixWasAlreadyEmpty() {
-        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
 
         when(s3Client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(listResponseWith());
 
@@ -97,7 +102,7 @@ class StoragePrefixMoverTest {
 
     @Test
     void moveIsANoOpWhenOldAndNewPrefixAreEqual() {
-        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
 
         mover.move(OLD_PREFIX, OLD_PREFIX);
 
@@ -106,7 +111,7 @@ class StoragePrefixMoverTest {
 
     @Test
     void moveCopiesThenDeletesAndVerifiesOldPrefixIsActuallyEmpty() {
-        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
         String oldKey = OLD_PREFIX + "/360p/segment_000.m4s";
 
         // 1st call: listKeys(oldPrefix) in move() itself, to drive the copy loop.
@@ -121,16 +126,21 @@ class StoragePrefixMoverTest {
 
         assertThatCode(() -> mover.move(OLD_PREFIX, NEW_PREFIX)).doesNotThrowAnyException();
 
+        // Metadata is re-derived from the *destination* key, not inherited from the source:
+        // this move lands the segment under public/, so it becomes immutable-cacheable.
         verify(s3Client).copyObject(CopyObjectRequest.builder()
                 .sourceBucket(BUCKET).sourceKey(oldKey)
                 .destinationBucket(BUCKET).destinationKey(NEW_PREFIX + "/360p/segment_000.m4s")
+                .metadataDirective(MetadataDirective.REPLACE)
+                .contentType("video/mp4")
+                .cacheControl(CachePolicy.IMMUTABLE)
                 .build());
         verify(s3Client, times(1)).deleteObjects(any(DeleteObjectsRequest.class));
     }
 
     @Test
     void moveThrowsWhenOldPrefixStillHasObjectsAfterCopyAndDelete() {
-        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer);
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
         String oldKey = OLD_PREFIX + "/360p/segment_000.m4s";
 
         // Every listing, including deleteAll's post-delete verification, still finds the
@@ -147,6 +157,65 @@ class StoragePrefixMoverTest {
 
         // The copy must have gone through regardless - only the cleanup verification failed.
         verify(s3Client, times(1)).copyObject(any(CopyObjectRequest.class));
+    }
+
+    /**
+     * The reason move() cannot use the default MetadataDirective.COPY: a video going PUBLIC ->
+     * PRIVATE would carry its year-long immutable Cache-Control into the private prefix, so the
+     * bytes stay cacheable long after the 3 h presigned URL that guards them has expired
+     * (CLAUDE.md 9.3). The policy has to be re-derived from the destination key.
+     */
+    @Test
+    void moveToPrivatePrefixReplacesImmutableCacheWithNoStore() {
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
+        String oldKey = PREFIX + "/360p/segment_000.m4s";
+        String privatePrefix = "private/5c4edc5e-e24e-4917-85a5-276cb038f4fb";
+
+        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenReturn(listResponseWith(oldKey), listResponseWith(oldKey), listResponseWith());
+        when(s3Client.copyObject(any(CopyObjectRequest.class))).thenReturn(CopyObjectResponse.builder().build());
+        when(s3Client.deleteObjects(any(DeleteObjectsRequest.class)))
+                .thenReturn(DeleteObjectsResponse.builder().build());
+
+        mover.move(PREFIX, privatePrefix);
+
+        verify(s3Client).copyObject(CopyObjectRequest.builder()
+                .sourceBucket(BUCKET).sourceKey(oldKey)
+                .destinationBucket(BUCKET).destinationKey(privatePrefix + "/360p/segment_000.m4s")
+                .metadataDirective(MetadataDirective.REPLACE)
+                .contentType("video/mp4")
+                .cacheControl(CachePolicy.NO_STORE)
+                .build());
+    }
+
+    @Test
+    void refreshObjectMetadataRewritesEachObjectOntoItsOwnKey() {
+        StoragePrefixMover mover = new StoragePrefixMover(s3Client, properties, bucketInitializer, CACHE_POLICY, CONTENT_TYPE);
+        String segment = PREFIX + "/360p/segment_000.m4s";
+        String thumbnail = PREFIX + "/thumbnail.jpg";
+
+        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenReturn(listResponseWith(segment, thumbnail));
+        when(s3Client.copyObject(any(CopyObjectRequest.class))).thenReturn(CopyObjectResponse.builder().build());
+
+        assertThat(mover.refreshObjectMetadata(PREFIX)).isEqualTo(2);
+
+        verify(s3Client).copyObject(CopyObjectRequest.builder()
+                .sourceBucket(BUCKET).sourceKey(segment)
+                .destinationBucket(BUCKET).destinationKey(segment)
+                .metadataDirective(MetadataDirective.REPLACE)
+                .contentType("video/mp4")
+                .cacheControl(CachePolicy.IMMUTABLE)
+                .build());
+        // Same prefix, same run, different policy - the .jpg must not pick up the segment's
+        // immutable cache (CLAUDE.md 9.4).
+        verify(s3Client).copyObject(CopyObjectRequest.builder()
+                .sourceBucket(BUCKET).sourceKey(thumbnail)
+                .destinationBucket(BUCKET).destinationKey(thumbnail)
+                .metadataDirective(MetadataDirective.REPLACE)
+                .contentType("image/jpeg")
+                .cacheControl(CachePolicy.SHORT_LIVED)
+                .build());
     }
 
     private static ListObjectsV2Response listResponseWith(String... keys) {

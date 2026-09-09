@@ -2,6 +2,8 @@ package com.bjarne.videoservice.catalog.storage;
 
 import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
+import com.bjarne.videoservice.shared.storage.CachePolicy;
+import com.bjarne.videoservice.shared.storage.StorageContentType;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -23,11 +25,16 @@ public class StoragePrefixMover {
     private final S3Client s3Client;
     private final S3Properties properties;
     private final S3BucketInitializer bucketInitializer;
+    private final CachePolicy cachePolicy;
+    private final StorageContentType contentType;
 
-    public StoragePrefixMover(S3Client s3Client, S3Properties properties, S3BucketInitializer bucketInitializer) {
+    public StoragePrefixMover(S3Client s3Client, S3Properties properties, S3BucketInitializer bucketInitializer,
+                              CachePolicy cachePolicy, StorageContentType contentType) {
         this.s3Client = s3Client;
         this.properties = properties;
         this.bucketInitializer = bucketInitializer;
+        this.cachePolicy = cachePolicy;
+        this.contentType = contentType;
     }
 
     public static String rewriteKey(String key, String oldPrefix, String newPrefix) {
@@ -42,15 +49,53 @@ public class StoragePrefixMover {
         List<String> oldKeys = listKeys(oldPrefix);
         for (String oldKey : oldKeys) {
             String newKey = rewriteKey(oldKey, oldPrefix, newPrefix);
+            // MetadataDirective.REPLACE, not the default COPY: the correct Cache-Control depends
+            // on the prefix the object is moving *to* (CLAUDE.md 9.3 - public segments are
+            // immutable, private ones no-store). Inheriting the source's value would leave a
+            // video that just became PRIVATE cacheable for a year. REPLACE drops *all* source
+            // metadata, so the content type has to be restated here or every moved segment
+            // silently degrades to application/octet-stream and playback breaks.
             s3Client.copyObject(CopyObjectRequest.builder()
                     .sourceBucket(properties.bucket()).sourceKey(oldKey)
                     .destinationBucket(properties.bucket()).destinationKey(newKey)
+                    .metadataDirective(MetadataDirective.REPLACE)
+                    .contentType(contentType.forKey(newKey))
+                    .cacheControl(cachePolicy.cacheControlFor(newKey))
                     .build());
         }
         // Re-lists oldPrefix from scratch rather than reusing oldKeys, so deleteAll's own
         // verification catches drift between the copy loop above and what's actually in the
         // bucket now - not just whatever the pre-copy listing happened to see.
         deleteAll(oldPrefix);
+    }
+
+    /**
+     * Rewrites Content-Type and Cache-Control on every object already under {@code prefix},
+     * leaving the bytes and the keys untouched. Needed because CachePolicy was added after
+     * videos had already been uploaded, and those objects carry no Cache-Control at all - a
+     * browser then falls back to heuristic freshness, which is unpredictable and, against an
+     * origin as slow as the one measured in production, expensive.
+     *
+     * <p>Copying an object onto its own key is the only way S3 exposes "change the metadata":
+     * it is explicitly permitted when MetadataDirective is REPLACE (and rejected when it is
+     * COPY, which would be a no-op request). Idempotent by construction - running it twice
+     * writes the same values - so a retried backfill job is safe.
+     *
+     * @return the number of objects rewritten, for progress logging
+     */
+    public int refreshObjectMetadata(String prefix) {
+        bucketInitializer.ensureReady();
+        List<String> keys = listKeys(prefix);
+        for (String key : keys) {
+            s3Client.copyObject(CopyObjectRequest.builder()
+                    .sourceBucket(properties.bucket()).sourceKey(key)
+                    .destinationBucket(properties.bucket()).destinationKey(key)
+                    .metadataDirective(MetadataDirective.REPLACE)
+                    .contentType(contentType.forKey(key))
+                    .cacheControl(cachePolicy.cacheControlFor(key))
+                    .build());
+        }
+        return keys.size();
     }
 
     public void deleteAll(String prefix) {
