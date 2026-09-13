@@ -211,7 +211,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/categories", "/api/videos", "/api/videos/*",
+                        .requestMatchers(HttpMethod.GET, "/api/categories", "/api/search/videos", "/api/videos", "/api/videos/*",
                                 "/api/users/*/videos", "/api/videos/*/manifest", "/api/videos/*/master.m3u8",
                                 "/api/videos/*/*/playlist.m3u8").permitAll()
                         // Playback telemetry is anonymous for the same reason view counting is:

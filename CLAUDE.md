@@ -84,7 +84,7 @@ There is **exactly one Gradle project, one JAR, one image**. Two Spring profiles
 - ❌ **Never** stream video bytes through Spring MVC (`MultipartFile`) → presigned S3 multipart.
 - ❌ **Never** `spring.jpa.hibernate.ddl-auto=update` → Flyway, `validate`.
 - ❌ **Never** expose JPA entities directly as API responses → DTOs.
-- ❌ **No** `OFFSET` paging in the catalog → cursor pagination.
+- ❌ **No** `OFFSET` paging in the catalog → cursor pagination. **One documented exception: search** (`GET /api/search/videos`) uses numbered pages of 50 with `OFFSET` + `COUNT`. Results are ordered by relevance, which gives no stable keyset, users rarely page past the first pages, and the UI wants "page X of Y". No other endpoint gets this exception without an equally explicit entry here.
 - ❌ **Never** branch on the storage provider in application code. There is exactly one S3 endpoint, supplied entirely by configuration. No `if (r2)`, no Hetzner-specific paths. This is what keeps the exception in §2.1 cheap to reverse.
 - ❌ **Never** bulk-move storage objects inside a request thread → background job (§9.5).
 - ✅ Visibility logic exists **in exactly one place** (`VisibilityPolicy`), not duplicated in every query.
@@ -225,6 +225,8 @@ transcode_jobs(status, scheduled_at)
 refresh_tokens(user_id), refresh_tokens(token_hash)
 ```
 
+Added later: `videos USING gin (title gin_trgm_ops)` (V12, `pg_trgm`) for title search. It serves `ILIKE '%q%'` and the word similarity operator `<%`.
+
 **No** `email_verified_at` — no email verification planned.
 **No** `DRAFT` — `visibility` is set at upload init and takes effect from `READY` onward.
 
@@ -250,6 +252,7 @@ New columns and their reasons:
 | GET | `/api/videos/{slug}` | optional | Detail, 404 for someone else's `PRIVATE` |
 | GET | `/api/me/videos` | JWT | Own videos incl. `PRIVATE` |
 | GET | `/api/users/{username}/videos` | optional | Channel page, `PUBLIC` only |
+| GET | `/api/search/videos` | – | `?q=&sort=relevance\|newest&page=&includeAgeRestricted=` — title search (pg_trgm, typo-tolerant), `PUBLIC` only, numbered pages of 50 (§3.2 exception) |
 | POST | `/api/videos` | JWT | Initiate upload → `videoId` + part URLs |
 | POST | `/api/videos/{id}/complete` | JWT+Owner | Complete multipart → job |
 | GET | `/api/videos/{id}/status` | JWT+Owner | Processing progress, incl. visibility migration |

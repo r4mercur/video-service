@@ -5,6 +5,7 @@ import com.bjarne.videoservice.catalog.dto.VideoDetailDto;
 import com.bjarne.videoservice.catalog.dto.VideoSummaryDto;
 import com.bjarne.videoservice.catalog.service.CatalogService;
 import com.bjarne.videoservice.shared.CursorPage;
+import com.bjarne.videoservice.shared.PageResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -37,6 +38,18 @@ public class CatalogController {
                                              @RequestParam(required = false) Integer limit,
                                              @RequestParam(required = false, defaultValue = "false") boolean includeAgeRestricted) {
         return catalogService.feed(category, sort, cursor, limit, includeAgeRestricted);
+    }
+
+    /*
+     * Deliberately not /api/videos/search: slugs are derived from titles, so a video titled
+     * "Search" would be shadowed by the literal path.
+     */
+    @GetMapping("/api/search/videos")
+    public PageResponse<VideoSummaryDto> search(@RequestParam(required = false) String q,
+                                                @RequestParam(required = false) String sort,
+                                                @RequestParam(required = false) Integer page,
+                                                @RequestParam(required = false, defaultValue = "false") boolean includeAgeRestricted) {
+        return catalogService.search(q, sort, page, includeAgeRestricted);
     }
 
     @GetMapping("/api/videos/{slug}")

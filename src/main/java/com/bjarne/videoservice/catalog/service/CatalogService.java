@@ -11,6 +11,7 @@ import com.bjarne.videoservice.identity.entity.User;
 import com.bjarne.videoservice.identity.repository.UserRepository;
 import com.bjarne.videoservice.shared.CursorCodec;
 import com.bjarne.videoservice.shared.CursorPage;
+import com.bjarne.videoservice.shared.PageResponse;
 import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import com.bjarne.videoservice.shared.exceptions.ValidationException;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +29,10 @@ public class CatalogService {
 
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 50;
+
+    private static final int SEARCH_PAGE_SIZE = 50;
+    private static final int SEARCH_QUERY_MIN_LENGTH = 2;
+    private static final int SEARCH_QUERY_MAX_LENGTH = 100;
 
     /**
      * Sentinel for "no cursor" (first page): guaranteed to sort after every real
@@ -102,6 +107,52 @@ public class CatalogService {
         List<Video> videos = videoRepository.findPublicByUser(owner.getId(), decoded.timestamp(), decoded.id(),
                 includeAgeRestricted, PageRequest.of(0, pageSize + 1));
         return buildPage(videos, pageSize, video -> VideoSummaryDto.from(video, urlResolver), Video::getPublishedAt);
+    }
+
+    /**
+     * Title search with numbered pages. OFFSET paging is a documented exception to CLAUDE.md 3.2:
+     * results are relevance-ranked, so there is no stable keyset, and nobody pages deep into them.
+     */
+    public PageResponse<VideoSummaryDto> search(String query, String sort, Integer page, boolean includeAgeRestricted) {
+        String normalizedQuery = query != null ? query.strip() : "";
+        if (normalizedQuery.length() < SEARCH_QUERY_MIN_LENGTH || normalizedQuery.length() > SEARCH_QUERY_MAX_LENGTH) {
+            throw new ValidationException("q must be between " + SEARCH_QUERY_MIN_LENGTH + " and "
+                    + SEARCH_QUERY_MAX_LENGTH + " characters");
+        }
+        boolean sortByRelevance = resolveSearchSort(sort);
+        int pageNumber = page != null ? page : 1;
+        if (pageNumber < 1) {
+            throw new ValidationException("page must be at least 1");
+        }
+
+        String pattern = "%" + escapeLikePattern(normalizedQuery) + "%";
+        long totalItems = videoRepository.countPublicSearch(normalizedQuery, pattern, includeAgeRestricted);
+        int totalPages = (int) ((totalItems + SEARCH_PAGE_SIZE - 1) / SEARCH_PAGE_SIZE);
+        long offset = (long) (pageNumber - 1) * SEARCH_PAGE_SIZE;
+        if (offset >= totalItems) {
+            return new PageResponse<>(List.of(), pageNumber, SEARCH_PAGE_SIZE, totalItems, totalPages);
+        }
+
+        List<VideoSummaryDto> items = videoRepository.searchPublic(normalizedQuery, pattern, includeAgeRestricted,
+                        sortByRelevance, SEARCH_PAGE_SIZE, offset).stream()
+                .map(video -> VideoSummaryDto.from(video, urlResolver))
+                .toList();
+        return new PageResponse<>(items, pageNumber, SEARCH_PAGE_SIZE, totalItems, totalPages);
+    }
+
+    private boolean resolveSearchSort(String sort) {
+        if (sort == null || sort.equals("relevance")) {
+            return true;
+        }
+        if (sort.equals("newest")) {
+            return false;
+        }
+        throw new ValidationException("Unsupported sort value: " + sort);
+    }
+
+    /** Makes %, _ and the escape character itself match literally in an ILIKE pattern. */
+    private static String escapeLikePattern(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private CursorCodec.Cursor decodeCursor(String cursor) {

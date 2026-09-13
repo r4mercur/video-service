@@ -31,10 +31,10 @@ class FlywayMigrationIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Test
     void categoriesAreSeededByFlyway() {
-        // 10 from V2, plus the age-restricted "adult" category added in V10.
-        assertThat(categoryRepository.count()).isEqualTo(11);
+        assertThat(categoryRepository.count()).isEqualTo(12);
         assertThat(categoryRepository.findBySlug("gaming")).isPresent();
         assertThat(categoryRepository.findBySlug("adult")).isPresent();
+        assertThat(categoryRepository.findBySlug("asmr")).isPresent();
     }
 
     @Test

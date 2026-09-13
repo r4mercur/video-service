@@ -59,6 +59,41 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
                                   @Param("cursorId") UUID cursorId, @Param("includeAgeRestricted") boolean includeAgeRestricted,
                                   Pageable pageable);
 
+    /*
+     * Native because the trigram operator (<%) and word_similarity() have no JPQL equivalent.
+     * A title matches as a substring (pattern is '%q%' with LIKE wildcards already escaped) or,
+     * for typos, when word_similarity reaches pg_trgm.word_similarity_threshold (default 0.6).
+     * The visibility filter mirrors findPublicFeed.
+     */
+    @Query(value = """
+            SELECT v.* FROM videos v
+            JOIN categories c ON c.id = v.category_id
+            WHERE v.status = 'READY'
+              AND v.visibility = 'PUBLIC'
+              AND v.published_at IS NOT NULL
+              AND (:includeAgeRestricted OR c.age_restricted = false)
+              AND (v.title ILIKE :pattern OR :query <% v.title)
+            ORDER BY CASE WHEN :sortByRelevance THEN word_similarity(:query, v.title) END DESC NULLS LAST,
+                     v.published_at DESC, v.id DESC
+            LIMIT :limit OFFSET :offset
+            """, nativeQuery = true)
+    List<Video> searchPublic(@Param("query") String query, @Param("pattern") String pattern,
+                             @Param("includeAgeRestricted") boolean includeAgeRestricted,
+                             @Param("sortByRelevance") boolean sortByRelevance,
+                             @Param("limit") int limit, @Param("offset") long offset);
+
+    @Query(value = """
+            SELECT count(*) FROM videos v
+            JOIN categories c ON c.id = v.category_id
+            WHERE v.status = 'READY'
+              AND v.visibility = 'PUBLIC'
+              AND v.published_at IS NOT NULL
+              AND (:includeAgeRestricted OR c.age_restricted = false)
+              AND (v.title ILIKE :pattern OR :query <% v.title)
+            """, nativeQuery = true)
+    long countPublicSearch(@Param("query") String query, @Param("pattern") String pattern,
+                           @Param("includeAgeRestricted") boolean includeAgeRestricted);
+
     @Query("""
             SELECT v FROM Video v
             WHERE v.user.id = :userId
