@@ -2,6 +2,7 @@ package com.bjarne.videoservice.upload.service;
 
 import com.bjarne.videoservice.catalog.entity.Video;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
+import com.bjarne.videoservice.catalog.service.VisibilityPolicy;
 import com.bjarne.videoservice.shared.exceptions.NotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -23,7 +24,10 @@ public class VideoOwnership {
     }
 
     public boolean isOwner(UUID videoId, Authentication authentication) {
+        // A video being deleted no longer exists for its owner either (CLAUDE.md 9.7) - this is
+        // what makes a repeated DELETE, a late upload complete or a PATCH on it a 404.
         Video video = videoRepository.findById(videoId)
+                .filter(found -> !VisibilityPolicy.isPendingDeletion(found))
                 .orElseThrow(() -> new NotFoundException("Video not found"));
         UUID currentUserId = UUID.fromString(((Jwt) authentication.getPrincipal()).getSubject());
         return video.getUser().getId().equals(currentUserId);

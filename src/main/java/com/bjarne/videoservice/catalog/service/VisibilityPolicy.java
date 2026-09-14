@@ -20,6 +20,17 @@ public final class VisibilityPolicy {
     }
 
     public static boolean isVisibleTo(Video video, UUID viewerUserId) {
+        if (isPendingDeletion(video)) {
+            return false;
+        }
         return isPubliclyVisible(video) || (viewerUserId != null && video.getUser().getId().equals(viewerUserId));
+    }
+
+    /**
+     * A video whose DELETE was accepted is gone for everyone, its owner included (CLAUDE.md 9.7),
+     * even though its row survives until the VIDEO_DELETION job has emptied storage.
+     */
+    public static boolean isPendingDeletion(Video video) {
+        return video.getStatus() == VideoStatus.DELETING;
     }
 }

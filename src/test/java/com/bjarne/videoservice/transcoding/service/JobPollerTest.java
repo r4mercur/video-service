@@ -1,6 +1,7 @@
 package com.bjarne.videoservice.transcoding.service;
 
 import com.bjarne.videoservice.catalog.service.CacheMetadataBackfillService;
+import com.bjarne.videoservice.catalog.service.VideoDeletionService;
 import com.bjarne.videoservice.catalog.service.VisibilityMigrationService;
 import com.bjarne.videoservice.transcoding.entity.JobType;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -36,6 +37,42 @@ class JobPollerTest {
     @Mock
     private CacheMetadataBackfillService cacheMetadataBackfillService;
 
+    @Mock
+    private VideoDeletionService videoDeletionService;
+
+    @Test
+    void dispatchesDeletionJobToVideoDeletionServiceThenRemovesRow() {
+        UUID videoId = UUID.randomUUID();
+        ClaimedJob job = new ClaimedJob(6L, videoId, JobType.VIDEO_DELETION);
+        when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
+
+        newPoller().poll();
+
+        var inOrder = inOrder(videoDeletionService, lifecycle);
+        inOrder.verify(videoDeletionService).deleteStorage(videoId, 6L);
+        inOrder.verify(lifecycle).recordDeletionSuccess(videoId);
+        verifyNoInteractions(transcodeService, visibilityMigrationService, cacheMetadataBackfillService);
+    }
+
+    /** The row must outlive a failed storage cleanup - otherwise the remaining objects are orphaned. */
+    @Test
+    void deletionFailureRequeuesWithoutRemovingRow() {
+        UUID videoId = UUID.randomUUID();
+        ClaimedJob job = new ClaimedJob(7L, videoId, JobType.VIDEO_DELETION);
+        when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
+        doThrow(new RuntimeException("S3 delete timed out")).when(videoDeletionService).deleteStorage(videoId, 7L);
+
+        newPoller().poll();
+
+        verify(lifecycle).recordDeletionFailure(eq(7L), any());
+        verify(lifecycle, never()).recordDeletionSuccess(any());
+    }
+
+    private JobPoller newPoller() {
+        return new JobPoller(lifecycle, transcodeService, visibilityMigrationService, cacheMetadataBackfillService,
+                videoDeletionService, new SimpleMeterRegistry());
+    }
+
     @Test
     void dispatchesTranscodeJobToTranscodeService() {
         UUID videoId = UUID.randomUUID();
@@ -44,8 +81,7 @@ class JobPollerTest {
         TranscodeOutcome outcome = new TranscodeOutcome(null, java.util.List.of(), false, false);
         when(transcodeService.process(videoId, 1L)).thenReturn(outcome);
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, cacheMetadataBackfillService,
-                new SimpleMeterRegistry()).poll();
+        newPoller().poll();
 
         verify(transcodeService).process(videoId, 1L);
         verify(lifecycle).recordSuccess(1L, videoId, outcome);
@@ -59,8 +95,7 @@ class JobPollerTest {
         when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
         when(visibilityMigrationService.migrate(videoId, 2L)).thenReturn("private/" + videoId);
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, cacheMetadataBackfillService,
-                new SimpleMeterRegistry()).poll();
+        newPoller().poll();
 
         verify(visibilityMigrationService).migrate(videoId, 2L);
         verify(lifecycle).recordMigrationSuccess(2L, videoId, "private/" + videoId);
@@ -74,8 +109,7 @@ class JobPollerTest {
         when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
         when(visibilityMigrationService.migrate(videoId, 3L)).thenThrow(new RuntimeException("S3 copy failed"));
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, cacheMetadataBackfillService,
-                new SimpleMeterRegistry()).poll();
+        newPoller().poll();
 
         verify(lifecycle).recordMigrationTransientFailure(eq(3L), any());
         verify(lifecycle, never()).recordTransientFailure(anyLong(), any(), any());
@@ -88,8 +122,7 @@ class JobPollerTest {
         when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
         when(cacheMetadataBackfillService.backfill(videoId, 4L)).thenReturn(1056);
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, cacheMetadataBackfillService,
-                new SimpleMeterRegistry()).poll();
+        newPoller().poll();
 
         verify(cacheMetadataBackfillService).backfill(videoId, 4L);
         verify(lifecycle).recordBackfillSuccess(4L);
@@ -108,8 +141,7 @@ class JobPollerTest {
         when(lifecycle.claimNext(any())).thenReturn(Optional.of(job));
         when(cacheMetadataBackfillService.backfill(videoId, 5L)).thenThrow(new RuntimeException("S3 copy failed"));
 
-        new JobPoller(lifecycle, transcodeService, visibilityMigrationService, cacheMetadataBackfillService,
-                new SimpleMeterRegistry()).poll();
+        newPoller().poll();
 
         verify(lifecycle).recordBackfillFailure(eq(5L), any());
         verify(lifecycle, never()).recordTransientFailure(anyLong(), any(), any());

@@ -7,6 +7,7 @@ import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import com.bjarne.videoservice.catalog.entity.Visibility;
 import com.bjarne.videoservice.catalog.repository.CategoryRepository;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
+import com.bjarne.videoservice.catalog.service.VideoDeletionService;
 import com.bjarne.videoservice.catalog.service.VisibilityMigrationService;
 import com.bjarne.videoservice.config.S3BucketInitializer;
 import com.bjarne.videoservice.config.S3Properties;
@@ -17,7 +18,10 @@ import com.bjarne.videoservice.identity.repository.UserRepository;
 import com.bjarne.videoservice.moderation.entity.Report;
 import com.bjarne.videoservice.moderation.repository.ReportRepository;
 import com.bjarne.videoservice.support.AbstractS3IntegrationTest;
+import com.bjarne.videoservice.transcoding.entity.JobStatus;
 import com.bjarne.videoservice.transcoding.entity.JobType;
+import com.bjarne.videoservice.transcoding.entity.TranscodeJob;
+import com.bjarne.videoservice.transcoding.repository.TranscodeJobRepository;
 import com.bjarne.videoservice.transcoding.service.ClaimedJob;
 import com.bjarne.videoservice.transcoding.service.TranscodeJobLifecycle;
 import com.jayway.jsonpath.JsonPath;
@@ -43,6 +47,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -87,6 +93,12 @@ class VideoManagementControllerIntegrationTest extends AbstractS3IntegrationTest
 
     @Autowired
     private VisibilityMigrationService visibilityMigrationService;
+
+    @Autowired
+    private VideoDeletionService videoDeletionService;
+
+    @Autowired
+    private TranscodeJobRepository transcodeJobRepository;
 
     private String currentUsername;
 
@@ -186,18 +198,71 @@ class VideoManagementControllerIntegrationTest extends AbstractS3IntegrationTest
     }
 
     @Test
-    void deleteRemovesVideoAndStorageObjects() throws Exception {
+    void deleteHidesVideoImmediatelyAndJobRemovesStorageAndRow() throws Exception {
         String accessToken = registerAndLogin();
         Video video = seedVideo(currentUser(), Visibility.PUBLIC);
         String key = video.getStoragePrefix() + "/master.m3u8";
         UUID videoId = video.getId();
 
+        // CLAUDE.md 9.7: the request only hides the video and enqueues a job - storage is untouched.
         mockMvc.perform(delete("/api/videos/" + videoId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isAccepted());
+
+        assertThat(videoRepository.findById(videoId).orElseThrow().getStatus()).isEqualTo(VideoStatus.DELETING);
+        headObject(key);
+
+        // Gone for the owner too, right away.
+        mockMvc.perform(get("/api/videos/" + video.getSlug())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/me/videos")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mockMvc.perform(delete("/api/videos/" + videoId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+
+        // Drive the enqueued job to completion the way JobPoller would.
+        ClaimedJob claimed = transcodeJobLifecycle.claimNext("test-worker").orElseThrow();
+        assertThat(claimed.type()).isEqualTo(JobType.VIDEO_DELETION);
+        assertThat(claimed.videoId()).isEqualTo(videoId);
+        videoDeletionService.deleteStorage(claimed.videoId(), claimed.jobId());
+        // Runs in this test's transaction, where claimNext left the job managed - the case that
+        // used to fail the flush with TransientPropertyValueException.
+        transcodeJobLifecycle.recordDeletionSuccess(claimed.videoId());
 
         assertThat(videoRepository.findById(videoId)).isEmpty();
         assertThatThrownBy(() -> headObject(key)).isInstanceOf(NoSuchKeyException.class);
+    }
+
+    @Test
+    void deleteWhileTranscodePendingReturnsConflict() throws Exception {
+        String accessToken = registerAndLogin();
+        Video video = seedVideo(currentUser(), Visibility.PUBLIC);
+        transcodeJobRepository.save(new TranscodeJob(video, Instant.now()));
+
+        mockMvc.perform(delete("/api/videos/" + video.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isConflict());
+
+        assertThat(videoRepository.findById(video.getId()).orElseThrow().getStatus()).isEqualTo(VideoStatus.READY);
+    }
+
+    @Test
+    void deleteCancelsQueuedCacheMetadataBackfill() throws Exception {
+        String accessToken = registerAndLogin();
+        Video video = seedVideo(currentUser(), Visibility.PUBLIC);
+        transcodeJobRepository.save(new TranscodeJob(video, Instant.now(), JobType.CACHE_METADATA_BACKFILL));
+
+        mockMvc.perform(delete("/api/videos/" + video.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isAccepted());
+
+        assertThat(transcodeJobRepository.existsByVideoIdAndTypeAndStatusIn(video.getId(),
+                JobType.CACHE_METADATA_BACKFILL, List.of(JobStatus.PENDING))).isFalse();
+        assertThat(transcodeJobRepository.existsByVideoIdAndTypeAndStatusIn(video.getId(),
+                JobType.VIDEO_DELETION, List.of(JobStatus.PENDING))).isTrue();
     }
 
     @Test

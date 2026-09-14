@@ -4,6 +4,7 @@ import com.bjarne.videoservice.catalog.entity.Video;
 import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -20,10 +21,26 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
 
     Optional<Video> findBySlug(String slug);
 
-    List<Video> findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBefore(Instant cutoff);
+    /**
+     * Removes the video row with a single DELETE, bypassing the persistence context. Everything
+     * referencing it (transcode_jobs, renditions, upload_sessions, ...) goes via ON DELETE CASCADE
+     * in the database - a TranscodeJob still managed in the same session would otherwise make
+     * Hibernate refuse the flush (TransientPropertyValueException). The context is cleared
+     * afterwards so no stale Video survives in it.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from Video v where v.id = :id")
+    int deleteRowById(@Param("id") UUID id);
 
-    /** Videos that have storage objects, i.e. everything a CACHE_METADATA_BACKFILL can apply to. */
-    List<Video> findByStoragePrefixIsNotNull();
+    /** Callers pass DELETING as {@code status}: a VIDEO_DELETION job already removes the source. */
+    List<Video> findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBeforeAndStatusNot(Instant cutoff,
+                                                                                               VideoStatus status);
+
+    /**
+     * Videos that have storage objects, i.e. everything a CACHE_METADATA_BACKFILL can apply to.
+     * Callers pass DELETING as {@code status}: rewriting objects that are about to be deleted is wasted work.
+     */
+    List<Video> findByStoragePrefixIsNotNullAndStatusNot(VideoStatus status);
 
     /*
      * cursorTs/cursorId are never null (CatalogService passes an "infinitely far in the future"
@@ -97,6 +114,7 @@ public interface VideoRepository extends JpaRepository<Video, UUID> {
     @Query("""
             SELECT v FROM Video v
             WHERE v.user.id = :userId
+              AND v.status <> com.bjarne.videoservice.catalog.entity.VideoStatus.DELETING
               AND (v.createdAt < :cursorTs
                    OR (v.createdAt = :cursorTs AND v.id < :cursorId))
             ORDER BY v.createdAt DESC, v.id DESC

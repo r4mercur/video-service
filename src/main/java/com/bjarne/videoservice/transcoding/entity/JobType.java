@@ -13,5 +13,11 @@ public enum JobType {
      * <p>The column is a plain VARCHAR(30) with no CHECK constraint (V9), so adding this value
      * needs no migration.
      */
-    CACHE_METADATA_BACKFILL
+    CACHE_METADATA_BACKFILL,
+    /**
+     * Removes a video's storage objects and then its row (CLAUDE.md 9.7). Queued rather than run
+     * in the DELETE request because emptying a full-length video's prefixes against a slow object
+     * store outlasts HTTP timeouts. Claimed ahead of every other job type (findClaimable).
+     */
+    VIDEO_DELETION
 }

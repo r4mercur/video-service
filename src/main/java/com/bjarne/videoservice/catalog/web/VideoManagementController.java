@@ -33,8 +33,9 @@ public class VideoManagementController {
     @DeleteMapping("/api/videos/{id}")
     @PreAuthorize("@videoOwnership.isOwner(#id, authentication)")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        // 202, not 204: the video is hidden immediately, but storage is emptied by a job (CLAUDE.md 9.7).
         videoManagementService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.accepted().build();
     }
 
     @PutMapping("/api/videos/{id}/thumbnail")

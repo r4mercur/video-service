@@ -1,6 +1,7 @@
 package com.bjarne.videoservice.catalog.service;
 
 import com.bjarne.videoservice.catalog.entity.Video;
+import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
 import com.bjarne.videoservice.catalog.storage.StoragePrefixMover;
 import com.bjarne.videoservice.config.TranscodeProperties;
@@ -47,7 +48,10 @@ public class SourceRetentionCleanupJob {
     @Transactional
     public void deleteExpiredSources() {
         Instant cutoff = clock.instant().minus(properties.sourceRetention());
-        List<Video> expired = videoRepository.findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBefore(cutoff);
+        // DELETING videos are skipped: their VIDEO_DELETION job removes the source, and saving one
+        // here could race the job removing the row.
+        List<Video> expired = videoRepository
+                .findBySourceKeyIsNotNullAndSourceDeletedAtIsNullAndCreatedAtBeforeAndStatusNot(cutoff, VideoStatus.DELETING);
         for (Video video : expired) {
             storagePrefixMover.deleteAll("source/" + video.getId());
             video.setSourceDeletedAt(clock.instant());

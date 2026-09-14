@@ -1,8 +1,8 @@
 package com.bjarne.videoservice.transcoding.service;
 
 import com.bjarne.videoservice.catalog.service.CacheMetadataBackfillService;
+import com.bjarne.videoservice.catalog.service.VideoDeletionService;
 import com.bjarne.videoservice.catalog.service.VisibilityMigrationService;
-import com.bjarne.videoservice.transcoding.entity.JobType;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -38,6 +38,7 @@ public class JobPoller {
     private final TranscodeService transcodeService;
     private final VisibilityMigrationService visibilityMigrationService;
     private final CacheMetadataBackfillService cacheMetadataBackfillService;
+    private final VideoDeletionService videoDeletionService;
     private final MeterRegistry meterRegistry;
     private final String workerId;
 
@@ -45,11 +46,13 @@ public class JobPoller {
                      TranscodeService transcodeService,
                      VisibilityMigrationService visibilityMigrationService,
                      CacheMetadataBackfillService cacheMetadataBackfillService,
+                     VideoDeletionService videoDeletionService,
                      MeterRegistry meterRegistry) {
         this.lifecycle = lifecycle;
         this.transcodeService = transcodeService;
         this.visibilityMigrationService = visibilityMigrationService;
         this.cacheMetadataBackfillService = cacheMetadataBackfillService;
+        this.videoDeletionService = videoDeletionService;
         this.meterRegistry = meterRegistry;
         this.workerId = resolveHostname() + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
@@ -66,9 +69,24 @@ public class JobPoller {
         log.info("Job {} for video {} claimed by {}", job.jobId(), job.videoId(), workerId);
 
         switch (job.type()) {
+            case VIDEO_DELETION -> processDeletion(job);
             case VISIBILITY_MIGRATION -> processMigration(job);
             case CACHE_METADATA_BACKFILL -> processCacheMetadataBackfill(job);
             case TRANSCODE -> processTranscode(job);
+        }
+    }
+
+    private void processDeletion(ClaimedJob job) {
+        long start = System.nanoTime();
+        try {
+            videoDeletionService.deleteStorage(job.videoId(), job.jobId());
+            lifecycle.recordDeletionSuccess(job.videoId());
+            recordProcessed(job, start, "success");
+            log.info("Deletion job {} removed video {}", job.jobId(), job.videoId());
+        } catch (Exception e) {
+            log.error("Deletion job {} for video {} failed, may be retried", job.jobId(), job.videoId(), e);
+            lifecycle.recordDeletionFailure(job.jobId(), String.valueOf(e.getMessage()));
+            recordProcessed(job, start, "failed_transient");
         }
     }
 

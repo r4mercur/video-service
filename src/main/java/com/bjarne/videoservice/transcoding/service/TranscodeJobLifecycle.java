@@ -5,6 +5,7 @@ import com.bjarne.videoservice.catalog.entity.VideoRendition;
 import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import com.bjarne.videoservice.catalog.entity.Visibility;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
+import com.bjarne.videoservice.catalog.service.VisibilityPolicy;
 import com.bjarne.videoservice.catalog.storage.StoragePrefixMover;
 import com.bjarne.videoservice.config.TranscodeProperties;
 import com.bjarne.videoservice.shared.exceptions.ConflictException;
@@ -75,7 +76,9 @@ public class TranscodeJobLifecycle {
      */
     @Transactional
     public void requeueForRetranscode(UUID videoId) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = videoRepository.findById(videoId)
+                .filter(found -> !VisibilityPolicy.isPendingDeletion(found))
+                .orElseThrow(() -> new NotFoundException("Video not found"));
         if (video.getSourceKey() == null) {
             throw new ConflictException("Video does not have a completed upload yet: " + videoId);
         }
@@ -195,7 +198,7 @@ public class TranscodeJobLifecycle {
     @Transactional
     public int enqueueCacheMetadataBackfill() {
         int enqueued = 0;
-        for (Video video : videoRepository.findByStoragePrefixIsNotNull()) {
+        for (Video video : videoRepository.findByStoragePrefixIsNotNullAndStatusNot(VideoStatus.DELETING)) {
             boolean alreadyQueued = jobRepository.existsByVideoIdAndTypeAndStatusIn(
                     video.getId(), JobType.CACHE_METADATA_BACKFILL, List.of(JobStatus.PENDING, JobStatus.RUNNING));
             if (!alreadyQueued) {
@@ -220,6 +223,28 @@ public class TranscodeJobLifecycle {
      */
     @Transactional
     public void recordBackfillFailure(Long jobId, String error) {
+        TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));
+        requeueOrFail(job, error);
+    }
+
+    /**
+     * Final step of a VIDEO_DELETION job, once VideoDeletionService has emptied storage. There is
+     * no job row to mark DONE afterwards: transcode_jobs.video_id is ON DELETE CASCADE, so the job
+     * (and the rest of the video's job history) goes with the video.
+     */
+    @Transactional
+    public void recordDeletionSuccess(UUID videoId) {
+        videoRepository.deleteRowById(videoId);
+    }
+
+    /**
+     * The video stays DELETING - still hidden everywhere - and the job is retried. It is never
+     * flipped back to a visible status, not even once retries are exhausted: part of its storage
+     * may already be gone. An exhausted deletion shows up as a FAILED VIDEO_DELETION job plus a
+     * non-zero videoservice_videos{status="deleting"} that doesn't drain (see prometheus/alerts.yml).
+     */
+    @Transactional
+    public void recordDeletionFailure(Long jobId, String error) {
         TranscodeJob job = jobRepository.findById(jobId).orElseThrow(() -> new NotFoundException("Job not found"));
         requeueOrFail(job, error);
     }

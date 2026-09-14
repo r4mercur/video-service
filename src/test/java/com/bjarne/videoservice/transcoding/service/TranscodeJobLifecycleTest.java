@@ -71,6 +71,56 @@ class TranscodeJobLifecycleTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void claimNextPrefersDeletionOverOlderJobs() {
+        TranscodeJob olderTranscode = jobRepository.save(new TranscodeJob(seedVideo(), clock.instant().minusSeconds(60)));
+        TranscodeJob newerDeletion = jobRepository.save(
+                new TranscodeJob(seedVideo(), clock.instant().minusSeconds(5), JobType.VIDEO_DELETION));
+
+        Optional<ClaimedJob> claimed = lifecycle.claimNext("worker-1");
+
+        assertThat(claimed).isPresent();
+        assertThat(claimed.get().jobId()).isEqualTo(newerDeletion.getId());
+        assertThat(claimed.get().type()).isEqualTo(JobType.VIDEO_DELETION);
+
+        // Cleanup, see comment on requeueForRetranscodeResetsVideoAndInsertsFreshPendingJob.
+        jobRepository.deleteAllById(List.of(olderTranscode.getId(), newerDeletion.getId()));
+    }
+
+    @Test
+    void recordDeletionSuccessRemovesVideoAndItsJobs() {
+        Video video = seedVideo();
+        video.setStatus(VideoStatus.DELETING);
+        videoRepository.save(video);
+        TranscodeJob job = jobRepository.save(new TranscodeJob(video, clock.instant(), JobType.VIDEO_DELETION));
+
+        lifecycle.recordDeletionSuccess(video.getId());
+
+        assertThat(videoRepository.findById(video.getId())).isEmpty();
+        assertThat(jobRepository.findById(job.getId())).isEmpty();
+    }
+
+    @Test
+    void recordDeletionFailureRequeuesAndKeepsVideoDeleting() {
+        Video video = seedVideo();
+        video.setStatus(VideoStatus.DELETING);
+        videoRepository.save(video);
+        TranscodeJob job = new TranscodeJob(video, clock.instant(), JobType.VIDEO_DELETION);
+        job.setAttempts(1);
+        job.setMaxAttempts(10);
+        jobRepository.save(job);
+
+        lifecycle.recordDeletionFailure(job.getId(), "S3 delete timed out");
+
+        TranscodeJob reloadedJob = jobRepository.findById(job.getId()).orElseThrow();
+        assertThat(reloadedJob.getStatus()).isEqualTo(JobStatus.PENDING);
+        assertThat(reloadedJob.getScheduledAt()).isAfter(clock.instant());
+        assertThat(videoRepository.findById(video.getId()).orElseThrow().getStatus()).isEqualTo(VideoStatus.DELETING);
+
+        // Cleanup, see comment on requeueForRetranscodeResetsVideoAndInsertsFreshPendingJob.
+        jobRepository.delete(reloadedJob);
+    }
+
+    @Test
     void claimNextReturnsEmptyWhenNothingPending() {
         assertThat(lifecycle.claimNext("worker-1")).isEmpty();
     }

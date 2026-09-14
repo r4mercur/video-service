@@ -3,6 +3,7 @@ package com.bjarne.videoservice.upload.service;
 import com.bjarne.videoservice.catalog.entity.Video;
 import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
+import com.bjarne.videoservice.catalog.service.VisibilityPolicy;
 import com.bjarne.videoservice.upload.entity.UploadSession;
 import com.bjarne.videoservice.upload.repository.UploadSessionRepository;
 import com.bjarne.videoservice.upload.storage.S3MultipartClient;
@@ -57,8 +58,11 @@ public class UploadCleanupJob {
             s3MultipartClient.abortMultipartUpload(session.getS3Key(), session.getS3UploadId());
 
             Video video = session.getVideo();
-            video.setStatus(VideoStatus.FAILED);
-            videoRepository.save(video);
+            // A video already being deleted must stay DELETING - FAILED would show it to its owner again.
+            if (!VisibilityPolicy.isPendingDeletion(video)) {
+                video.setStatus(VideoStatus.FAILED);
+                videoRepository.save(video);
+            }
 
             session.setCompletedAt(clock.instant());
             uploadSessionRepository.save(session);

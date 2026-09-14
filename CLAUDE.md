@@ -86,7 +86,7 @@ There is **exactly one Gradle project, one JAR, one image**. Two Spring profiles
 - ❌ **Never** expose JPA entities directly as API responses → DTOs.
 - ❌ **No** `OFFSET` paging in the catalog → cursor pagination. **One documented exception: search** (`GET /api/search/videos`) uses numbered pages of 50 with `OFFSET` + `COUNT`. Results are ordered by relevance, which gives no stable keyset, users rarely page past the first pages, and the UI wants "page X of Y". No other endpoint gets this exception without an equally explicit entry here.
 - ❌ **Never** branch on the storage provider in application code. There is exactly one S3 endpoint, supplied entirely by configuration. No `if (r2)`, no Hetzner-specific paths. This is what keeps the exception in §2.1 cheap to reverse.
-- ❌ **Never** bulk-move storage objects inside a request thread → background job (§9.5).
+- ❌ **Never** bulk-move or bulk-delete storage objects inside a request thread → background job (§9.5, §9.7).
 - ✅ Visibility logic exists **in exactly one place** (`VisibilityPolicy`), not duplicated in every query.
 - ✅ Errors as RFC-9457 `ProblemDetail` via a global `@RestControllerAdvice`.
 - ✅ Every endpoint with write access checks ownership via `@PreAuthorize`.
@@ -193,7 +193,7 @@ refresh_tokens    id user_id token_hash expires_at revoked_at replaced_by user_a
 categories        id slug(unique) name sort_order active
 
 videos            id(uuid) user_id category_id(NOT NULL) title description slug(unique)
-                  status(UPLOADING|PROCESSING|READY|FAILED|BLOCKED)
+                  status(UPLOADING|PROCESSING|READY|FAILED|BLOCKED|DELETING)
                   visibility(PUBLIC|PRIVATE)
                   visibility_target(PUBLIC|PRIVATE|NULL)   -- set while a move is in flight
                   duration_seconds width height size_bytes
@@ -205,7 +205,7 @@ video_renditions  video_id height bitrate_kbps playlist_key size_bytes
 
 upload_sessions   id video_id s3_upload_id s3_key expires_at completed_at
 
-transcode_jobs    id video_id type(TRANSCODE|VISIBILITY_MIGRATION)
+transcode_jobs    id video_id type(TRANSCODE|VISIBILITY_MIGRATION|CACHE_METADATA_BACKFILL|VIDEO_DELETION)
                   status attempts max_attempts
                   locked_at locked_by last_error scheduled_at created_at
 
@@ -257,7 +257,7 @@ New columns and their reasons:
 | POST | `/api/videos/{id}/complete` | JWT+Owner | Complete multipart → job |
 | GET | `/api/videos/{id}/status` | JWT+Owner | Processing progress, incl. visibility migration |
 | PATCH | `/api/videos/{id}` | JWT+Owner | Title, description, category, visibility |
-| DELETE | `/api/videos/{id}` | JWT+Owner | Delete incl. object storage cleanup |
+| DELETE | `/api/videos/{id}` | JWT+Owner | `202 Accepted`: hides the video at once, storage cleanup and row removal run as a job (§9.7). `409` while a report is open or the video is processing |
 | PUT | `/api/videos/{id}/thumbnail` | JWT+Owner | Upload custom thumbnail (multipart, `file` field) |
 | DELETE | `/api/videos/{id}/thumbnail` | JWT+Owner | Remove custom thumbnail, revert to auto-generated |
 | GET | `/api/videos/{id}/manifest` | optional | Playlist URL (signed for `PRIVATE`) |
@@ -437,6 +437,22 @@ Neither replaces the other. Agreement means the origin is the bottleneck; **prob
 ⚠️ The telemetry endpoint is anonymous, because watching needs no account (§1) and a metric covering only logged-in viewers would miss most of the audience. That makes **tag cardinality a security property, not a style question**: every tag value becomes a permanent Prometheus series. No video id, no user id, no free-form strings — the only tag is rendition height, folded onto the known ladder so an invented value cannot mint a new series.
 
 **Reference points for reading the numbers:** segments are 4 s (`HlsPackager -hls_time 4`), so a segment must arrive in under 4 s to sustain playback — p95 approaching that means buffers drain faster than they fill. The ladder's declared bandwidths (360p 800, 720p 2500, 1080p 4500 kbit/s) are the comparison for viewer throughput; sustained below the lowest rung, ABR has nowhere left to shift down to.
+
+### 9.7 Video deletion
+
+Deleting a full-length video means emptying roughly 5,400 objects under its prefix plus the retained source. Against a slow object store that outlasted the 30-second HTTP timeout, and the synchronous request died midway — leaving a row that still existed and a video whose segments were partly gone.
+
+It therefore runs as a job, like §9.5:
+
+1. `DELETE /api/videos/{id}` checks ownership and open reports, and returns **`409`** while a `TRANSCODE` or `VISIBILITY_MIGRATION` job is pending or running, or any job is running. A queued `CACHE_METADATA_BACKFILL` is cancelled instead of blocking. It then sets `status = DELETING`, enqueues a `VIDEO_DELETION` job and returns **`202 Accepted`**.
+2. `DELETING` means **gone for everyone, the owner included**, from the moment of the request: `VisibilityPolicy.isPendingDeletion` makes detail, manifest, views and reports 404, `VideoOwnership` makes every owner endpoint 404, feed/search/channel already filter on `READY`, `/api/me/videos` excludes it, and admin block/unblock/retranscode, the cache backfill and source retention skip it.
+3. The worker aborts a still-open multipart upload, empties `storagePrefix` and `source/{id}` (each `deleteAll` is idempotent and verifies the prefix is empty), and only then deletes the row. `transcode_jobs.video_id` is `ON DELETE CASCADE`, so the job row goes with it.
+4. `VIDEO_DELETION` jobs are **claimed before every other job type**. With worker concurrency 1 a deletion still waits for a job that is already running — up to hours for a transcode — but the video is hidden in the meantime.
+5. Failures retry with backoff, **10 attempts** (~2 h). A `DELETING` video never returns to a visible status, not even when retries are exhausted, because part of its storage may already be gone. That case is the `VideoDeletionStuck` alert.
+
+> **Why not `@Async` or a thread pool and an early `200`.** Work in an in-memory executor is lost on every restart or deploy, has no retry and leaves no record — orphaned objects nobody knows about. §12's deletion concept requires a deletion request to demonstrably complete.
+>
+> **Why not parallel deletes inside the request.** `StoragePrefixMover` already uses `DeleteObjects` in batches of 1,000, so a full-length video is about six delete calls. When that is slow, the time is spent inside the provider per batch; parallelism buys a constant factor, not a guarantee against the timeout.
 
 ---
 

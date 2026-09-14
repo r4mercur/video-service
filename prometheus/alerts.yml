@@ -42,6 +42,20 @@ groups:
           summary: "Jobs are failing with transient errors"
           description: "{{ $value }} transient job failures in the last hour (type {{ $labels.type }})."
 
+      # CLAUDE.md 9.7: a DELETING video is already hidden, so nobody notices when its deletion
+      # job gives up - but its renditions and source stay in storage, which a GDPR deletion
+      # request doesn't allow. A deletion can wait behind a running 2h transcode and then retries
+      # for ~2h, so 6h covers the worst legitimate case. Coarse on purpose: steady deletion
+      # traffic could keep the gauge above zero, which at this platform's volume isn't a concern.
+      - alert: VideoDeletionStuck
+        expr: videoservice_videos{status="deleting"} > 0
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Video deletions are not completing"
+          description: "{{ $value }} video(s) have been DELETING for 6h. Check for FAILED VIDEO_DELETION jobs (last_error) - their storage objects are still present."
+
       - alert: HighHttp5xxRate
         expr: >
           sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))

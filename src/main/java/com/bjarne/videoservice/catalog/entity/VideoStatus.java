@@ -5,5 +5,11 @@ public enum VideoStatus {
     PROCESSING,
     READY,
     FAILED,
-    BLOCKED
+    BLOCKED,
+    /**
+     * DELETE was accepted and a VIDEO_DELETION job is emptying storage (CLAUDE.md 9.7). The video
+     * is gone for everyone, its owner included, and never returns to another status - some of its
+     * objects may already be deleted.
+     */
+    DELETING
 }

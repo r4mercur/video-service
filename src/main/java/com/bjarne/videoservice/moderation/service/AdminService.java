@@ -3,6 +3,7 @@ package com.bjarne.videoservice.moderation.service;
 import com.bjarne.videoservice.catalog.entity.Video;
 import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
+import com.bjarne.videoservice.catalog.service.VisibilityPolicy;
 import com.bjarne.videoservice.identity.entity.User;
 import com.bjarne.videoservice.identity.repository.UserRepository;
 import com.bjarne.videoservice.moderation.dto.AdminReportDto;
@@ -60,7 +61,9 @@ public class AdminService {
 
     @Transactional
     public void blockVideo(UUID videoId, UUID adminUserId, String reason) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = videoRepository.findById(videoId)
+                .filter(found -> !VisibilityPolicy.isPendingDeletion(found))
+                .orElseThrow(() -> new NotFoundException("Video not found"));
         if (video.getStatus() == VideoStatus.BLOCKED) {
             throw new ConflictException("Video is already blocked");
         }
@@ -71,7 +74,9 @@ public class AdminService {
 
     @Transactional
     public void unblockVideo(UUID videoId, UUID adminUserId, String reason) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = videoRepository.findById(videoId)
+                .filter(found -> !VisibilityPolicy.isPendingDeletion(found))
+                .orElseThrow(() -> new NotFoundException("Video not found"));
         if (video.getStatus() != VideoStatus.BLOCKED) {
             throw new ConflictException("Video is not blocked");
         }

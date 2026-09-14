@@ -4,10 +4,10 @@ import com.bjarne.videoservice.catalog.dto.UpdateVideoRequest;
 import com.bjarne.videoservice.catalog.dto.VideoDetailDto;
 import com.bjarne.videoservice.catalog.entity.Category;
 import com.bjarne.videoservice.catalog.entity.Video;
+import com.bjarne.videoservice.catalog.entity.VideoStatus;
 import com.bjarne.videoservice.catalog.entity.Visibility;
 import com.bjarne.videoservice.catalog.repository.CategoryRepository;
 import com.bjarne.videoservice.catalog.repository.VideoRepository;
-import com.bjarne.videoservice.catalog.storage.StoragePrefixMover;
 import com.bjarne.videoservice.delivery.service.MediaUrlResolver;
 import com.bjarne.videoservice.moderation.entity.ReportStatus;
 import com.bjarne.videoservice.moderation.repository.ReportRepository;
@@ -27,16 +27,22 @@ import java.util.UUID;
 
 /**
  * Write-side video management by the owner (AP7): changing metadata/visibility and
- * deleting incl. S3 cleanup. Ownership is checked exclusively via @PreAuthorize on the
+ * deleting (storage cleanup itself runs as a VIDEO_DELETION job). Ownership is checked exclusively via @PreAuthorize on the
  * controller (VideoOwnership bean, CLAUDE.md 3.2), not duplicated here.
  */
 @Service
 public class VideoManagementService {
 
+    /**
+     * Far more than a transcode gets: storage deletes are idempotent and cheap to repeat, and a
+     * DELETING video can never become visible again, so giving up early only leaves orphaned
+     * objects for a human to clean up. With the default backoff this is roughly two hours of retries.
+     */
+    private static final int DELETION_MAX_ATTEMPTS = 10;
+
     private final VideoRepository videoRepository;
     private final CategoryRepository categoryRepository;
     private final ReportRepository reportRepository;
-    private final StoragePrefixMover storagePrefixMover;
     private final TranscodeJobRepository transcodeJobRepository;
     private final MediaUrlResolver urlResolver;
     private final ThumbnailService thumbnailService;
@@ -45,7 +51,6 @@ public class VideoManagementService {
     public VideoManagementService(VideoRepository videoRepository,
                                   CategoryRepository categoryRepository,
                                   ReportRepository reportRepository,
-                                  StoragePrefixMover storagePrefixMover,
                                   TranscodeJobRepository transcodeJobRepository,
                                   MediaUrlResolver urlResolver,
                                   ThumbnailService thumbnailService,
@@ -53,7 +58,6 @@ public class VideoManagementService {
         this.videoRepository = videoRepository;
         this.categoryRepository = categoryRepository;
         this.reportRepository = reportRepository;
-        this.storagePrefixMover = storagePrefixMover;
         this.transcodeJobRepository = transcodeJobRepository;
         this.urlResolver = urlResolver;
         this.thumbnailService = thumbnailService;
@@ -62,7 +66,7 @@ public class VideoManagementService {
 
     @Transactional
     public UpdateVideoResult update(UUID videoId, UpdateVideoRequest request) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = findActiveVideo(videoId);
 
         if (request.title() != null) {
             video.setTitle(request.title());
@@ -92,35 +96,51 @@ public class VideoManagementService {
 
     @Transactional
     public VideoDetailDto setThumbnail(UUID videoId, MultipartFile file) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = findActiveVideo(videoId);
         thumbnailService.store(video, file);
         return VideoDetailDto.from(video, urlResolver);
     }
 
     @Transactional
     public VideoDetailDto removeThumbnail(UUID videoId) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = findActiveVideo(videoId);
         thumbnailService.remove(video);
         return VideoDetailDto.from(video, urlResolver);
     }
 
+    /**
+     * CLAUDE.md 9.7: emptying a full-length video's storage outlasts HTTP timeouts, so the request
+     * only hides the video (status DELETING) and enqueues a VIDEO_DELETION job - the worker empties
+     * storage and removes the row. The controller answers 202 Accepted.
+     */
     @Transactional
     public void delete(UUID videoId) {
-        Video video = videoRepository.findById(videoId).orElseThrow(() -> new NotFoundException("Video not found"));
+        Video video = findActiveVideo(videoId);
         if (reportRepository.existsByVideoIdAndStatus(videoId, ReportStatus.OPEN)) {
             throw new ConflictException("Video cannot be deleted while a report is open");
         }
-        if (video.getStoragePrefix() != null) {
-            storagePrefixMover.deleteAll(video.getStoragePrefix());
+        boolean processing = transcodeJobRepository.existsByVideoIdAndTypeInAndStatusIn(videoId,
+                List.of(JobType.TRANSCODE, JobType.VISIBILITY_MIGRATION), List.of(JobStatus.PENDING, JobStatus.RUNNING))
+                || transcodeJobRepository.existsByVideoIdAndTypeInAndStatusIn(videoId,
+                List.of(JobType.values()), List.of(JobStatus.RUNNING));
+        if (processing) {
+            throw new ConflictException("Video cannot be deleted while it is being processed or its visibility is changing");
         }
-        // Source lives under its own "source/{id}" prefix (UploadService), never under
-        // storagePrefix, so the sweep above doesn't touch it. Safe to call unconditionally on
-        // sourceDeletedAt: if SourceRetentionCleanupJob already removed it, the prefix is
-        // already empty and this is a no-op.
-        if (video.getSourceKey() != null) {
-            storagePrefixMover.deleteAll("source/" + video.getId());
-        }
-        videoRepository.delete(video);
+        // A queued backfill is housekeeping nobody asked for - drop it rather than block the delete.
+        transcodeJobRepository.deleteByVideoIdAndTypeAndStatus(videoId, JobType.CACHE_METADATA_BACKFILL, JobStatus.PENDING);
+
+        video.setStatus(VideoStatus.DELETING);
+        videoRepository.save(video);
+        TranscodeJob job = new TranscodeJob(video, clock.instant(), JobType.VIDEO_DELETION);
+        job.setMaxAttempts(DELETION_MAX_ATTEMPTS);
+        transcodeJobRepository.save(job);
+    }
+
+    /** A video being deleted no longer exists for its owner (CLAUDE.md 9.7). */
+    private Video findActiveVideo(UUID videoId) {
+        return videoRepository.findById(videoId)
+                .filter(video -> !VisibilityPolicy.isPendingDeletion(video))
+                .orElseThrow(() -> new NotFoundException("Video not found"));
     }
 
     /**
