@@ -130,6 +130,7 @@ public class ThumbnailService {
         try {
             ffmpegRunner.run(List.of(
                     transcodeProperties.ffmpegPath(), "-y",
+                    "-format_whitelist", FfmpegRunner.STILL_IMAGE_INPUT_FORMATS,
                     "-i", input.toString(),
                     "-frames:v", "1",
                     "-vf", "scale=640:-2",

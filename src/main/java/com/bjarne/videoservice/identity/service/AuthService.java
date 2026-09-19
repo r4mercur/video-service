@@ -1,7 +1,9 @@
 package com.bjarne.videoservice.identity.service;
 
 import com.bjarne.videoservice.config.AuthProperties;
+import com.bjarne.videoservice.delivery.service.MediaUrlResolver;
 import com.bjarne.videoservice.identity.dto.LoginRequest;
+import com.bjarne.videoservice.identity.dto.PublicUserResponse;
 import com.bjarne.videoservice.identity.dto.RegisterRequest;
 import com.bjarne.videoservice.identity.dto.UserResponse;
 import com.bjarne.videoservice.identity.entity.RefreshToken;
@@ -34,6 +36,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthProperties properties;
     private final Clock clock;
+    private final MediaUrlResolver urlResolver;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Counter loginSuccessCounter;
     private final Counter loginFailureCounter;
@@ -45,6 +48,7 @@ public class AuthService {
                        JwtService jwtService,
                        AuthProperties properties,
                        Clock clock,
+                       MediaUrlResolver urlResolver,
                        MeterRegistry meterRegistry) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -52,6 +56,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.properties = properties;
         this.clock = clock;
+        this.urlResolver = urlResolver;
         this.loginSuccessCounter = Counter.builder("videoservice.auth.logins")
                 .tag("result", "success")
                 .description("Login attempts by result")
@@ -83,7 +88,7 @@ public class AuthService {
         }
         User user = new User(request.email(), request.username(), passwordEncoder.encode(request.password()));
         userRepository.save(user);
-        return UserResponse.from(user);
+        return UserResponse.from(user, urlResolver);
     }
 
     @Transactional
@@ -103,7 +108,7 @@ public class AuthService {
         loginSuccessCounter.increment();
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = issueRefreshToken(user, userAgent, null);
-        return new LoginResult(UserResponse.from(user), accessToken, properties.accessTokenTtl().toSeconds(),
+        return new LoginResult(UserResponse.from(user, urlResolver), accessToken, properties.accessTokenTtl().toSeconds(),
                 refreshToken);
     }
 
@@ -134,7 +139,14 @@ public class AuthService {
     @Transactional(readOnly = true)
     public UserResponse getCurrentUser(UUID userId) {
         User user = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
-        return UserResponse.from(user);
+        return UserResponse.from(user, urlResolver);
+    }
+
+    /** Resolves the same way as the channel's video list (CatalogService#channel), so both 404 together. */
+    @Transactional(readOnly = true)
+    public PublicUserResponse getPublicProfile(String username) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new NotFoundException("User not found"));
+        return PublicUserResponse.from(user, urlResolver);
     }
 
     @Transactional

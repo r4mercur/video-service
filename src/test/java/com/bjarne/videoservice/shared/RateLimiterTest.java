@@ -17,7 +17,8 @@ class RateLimiterTest {
             new RateLimitProperties.Limit(1, Duration.ofHours(1)),
             new RateLimitProperties.Limit(3, Duration.ofHours(1)),
             new RateLimitProperties.Limit(1, Duration.ofHours(1)),
-            new RateLimitProperties.Limit(4, Duration.ofMinutes(5))), meterRegistry);
+            new RateLimitProperties.Limit(4, Duration.ofMinutes(5)),
+            new RateLimitProperties.Limit(2, Duration.ofHours(1))), meterRegistry);
 
     @Test
     void allowsUpToCapacityThenDeniesForSameKey() {
@@ -64,5 +65,16 @@ class RateLimiterTest {
 
         // Doesn't share capacity with the per-user report bucket.
         assertThat(rateLimiter.tryConsumeReport("1.2.3.4")).isTrue();
+    }
+
+    @Test
+    void avatarUploadsAreLimitedPerUser() {
+        assertThat(rateLimiter.tryConsumeAvatarUpload("user-1")).isTrue();
+        assertThat(rateLimiter.tryConsumeAvatarUpload("user-1")).isTrue();
+        assertThat(rateLimiter.tryConsumeAvatarUpload("user-1")).isFalse();
+
+        assertThat(rateLimiter.tryConsumeAvatarUpload("user-2")).isTrue();
+        assertThat(meterRegistry.counter("videoservice.ratelimit.rejected", "limiter", "avatar_upload").count())
+                .isEqualTo(1.0);
     }
 }

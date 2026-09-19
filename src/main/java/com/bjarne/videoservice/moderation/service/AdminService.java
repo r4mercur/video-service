@@ -6,6 +6,7 @@ import com.bjarne.videoservice.catalog.repository.VideoRepository;
 import com.bjarne.videoservice.catalog.service.VisibilityPolicy;
 import com.bjarne.videoservice.identity.entity.User;
 import com.bjarne.videoservice.identity.repository.UserRepository;
+import com.bjarne.videoservice.identity.service.AvatarService;
 import com.bjarne.videoservice.moderation.dto.AdminReportDto;
 import com.bjarne.videoservice.moderation.entity.AuditLog;
 import com.bjarne.videoservice.moderation.entity.AuditLogAction;
@@ -45,17 +46,20 @@ public class AdminService {
     private final ReportRepository reportRepository;
     private final AuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
+    private final AvatarService avatarService;
     private final Clock clock;
 
     public AdminService(VideoRepository videoRepository,
                         ReportRepository reportRepository,
                         AuditLogRepository auditLogRepository,
                         UserRepository userRepository,
+                        AvatarService avatarService,
                         Clock clock) {
         this.videoRepository = videoRepository;
         this.reportRepository = reportRepository;
         this.auditLogRepository = auditLogRepository;
         this.userRepository = userRepository;
+        this.avatarService = avatarService;
         this.clock = clock;
     }
 
@@ -100,6 +104,22 @@ public class AdminService {
         block(report.getVideo(), adminUserId, report, reason);
         writeAuditLog(adminUserId, AuditLogAction.REPORT_UPHELD, report.getVideo(), report, reason);
         return AdminReportDto.from(report);
+    }
+
+    /**
+     * A profile photo is public user content like a video (CLAUDE.md 9.8/12), so removing one is a
+     * moderation action with a mandatory reason and an audit entry. 409 when there is nothing to
+     * remove - an audit entry for a no-op would claim an action that never happened.
+     */
+    @Transactional
+    public void removeUserAvatar(String username, UUID adminUserId, String reason) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new NotFoundException("User not found"));
+        if (user.getAvatarKey() == null) {
+            throw new ConflictException("User has no profile photo");
+        }
+        avatarService.remove(user.getId());
+        auditLogRepository.save(new AuditLog(userRepository.getReferenceById(adminUserId),
+                AuditLogAction.AVATAR_REMOVED, user, reason));
     }
 
     @Transactional(readOnly = true)

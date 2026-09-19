@@ -35,6 +35,10 @@ public class AuditLog {
     @JoinColumn(name = "report_id")
     private Report report;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_user_id")
+    private User targetUser;
+
     @Column(nullable = false)
     private String reason;
 
@@ -50,6 +54,14 @@ public class AuditLog {
         this.action = action;
         this.video = video;
         this.report = report;
+        this.reason = reason;
+    }
+
+    /** For actions aimed at a user rather than a video, e.g. removing a profile photo. */
+    public AuditLog(User actor, AuditLogAction action, User targetUser, String reason) {
+        this.actor = actor;
+        this.action = action;
+        this.targetUser = targetUser;
         this.reason = reason;
     }
 
@@ -71,6 +83,10 @@ public class AuditLog {
 
     public Report getReport() {
         return report;
+    }
+
+    public User getTargetUser() {
+        return targetUser;
     }
 
     public String getReason() {

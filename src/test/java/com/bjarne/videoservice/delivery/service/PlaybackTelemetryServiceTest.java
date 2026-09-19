@@ -106,7 +106,8 @@ class PlaybackTelemetryServiceTest {
                 new RateLimitProperties.Limit(3, Duration.ofHours(1)),
                 new RateLimitProperties.Limit(10, Duration.ofHours(1)),
                 new RateLimitProperties.Limit(3, Duration.ofHours(1)),
-                new RateLimitProperties.Limit(telemetryCapacity, Duration.ofMinutes(5))), registry);
+                new RateLimitProperties.Limit(telemetryCapacity, Duration.ofMinutes(5)),
+                new RateLimitProperties.Limit(10, Duration.ofHours(1))), registry);
         return new PlaybackTelemetryService(registry, rateLimiter);
     }
 

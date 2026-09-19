@@ -73,6 +73,28 @@ class ThumbnailServiceTest {
         assertThat(request.getValue().contentType()).isEqualTo("image/jpeg");
     }
 
+    /** The input format whitelist is what keeps ffmpeg from following HLS/concat references. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void ffmpegIsRestrictedToStillImageInputFormats() {
+        ThumbnailService service = new ThumbnailService(s3Client, s3Properties, bucketInitializer,
+                transcodeProperties(), new ThumbnailProperties(8 * 1024 * 1024), ffmpegRunner, videoRepository,
+                new CachePolicy());
+        Video video = new Video(null, null, "A video", "a-video", Visibility.PUBLIC);
+        video.setStoragePrefix(PREFIX);
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+
+        service.store(video, new MockMultipartFile("file", "cover.jpg", "image/jpeg", new byte[] {1, 2, 3}));
+
+        ArgumentCaptor<List<String>> command = ArgumentCaptor.forClass(List.class);
+        org.mockito.Mockito.verify(ffmpegRunner).run(command.capture(), any(Duration.class));
+        List<String> args = command.getValue();
+        int whitelist = args.indexOf("-format_whitelist");
+        assertThat(whitelist).isNotNegative().isLessThan(args.indexOf("-i"));
+        assertThat(args.get(whitelist + 1)).isEqualTo(FfmpegRunner.STILL_IMAGE_INPUT_FORMATS);
+    }
+
     private static TranscodeProperties transcodeProperties() {
         return new TranscodeProperties("ffmpeg", "ffprobe", null, Duration.ofHours(2), Duration.ofSeconds(5),
                 Duration.ofHours(2), List.of(Duration.ofMinutes(1)), List.of(360, 720, 1080),

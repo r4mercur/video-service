@@ -4,5 +4,6 @@ public enum AuditLogAction {
     VIDEO_BLOCKED,
     VIDEO_UNBLOCKED,
     REPORT_DISMISSED,
-    REPORT_UPHELD
+    REPORT_UPHELD,
+    AVATAR_REMOVED
 }

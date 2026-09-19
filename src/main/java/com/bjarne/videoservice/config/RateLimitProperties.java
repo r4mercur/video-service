@@ -7,7 +7,7 @@ import java.time.Duration;
 
 @ConfigurationProperties(prefix = "app.rate-limit")
 public record RateLimitProperties(Limit login, Limit register, Limit report, Limit reportAnonymous,
-                                  Limit playbackTelemetry) {
+                                  Limit playbackTelemetry, Limit avatarUpload) {
 
     public record Limit(@DefaultValue("5") int capacity, @DefaultValue("PT15M") Duration refillPeriod) {
     }
