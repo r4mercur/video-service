@@ -37,4 +37,9 @@ public class MediaUrlResolver {
         }
         return visibility == Visibility.PUBLIC ? publicBaseUrl + "/" + key : presigner.presignGet(key);
     }
+
+    /** For objects that are public regardless of any video's visibility, e.g. profile photos. */
+    public String resolvePublic(String key) {
+        return resolve(Visibility.PUBLIC, key);
+    }
 }

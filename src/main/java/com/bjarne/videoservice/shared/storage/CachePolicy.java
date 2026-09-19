@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component;
  * Since Caddy is not in the media data path in production, no proxy downstream adds these
  * headers - they exist only if they are written as object metadata at PutObject time. Every
  * component that writes an object goes through here: {@code ArtifactStorage} (transcode output),
- * {@code ThumbnailService} (custom thumbnails) and {@code StoragePrefixMover} (visibility
+ * {@code ThumbnailService} (custom thumbnails), {@code AvatarStorage} (profile photos) and
+ * {@code StoragePrefixMover} (visibility
  * migration, which must re-derive the value because the correct policy depends on the prefix the
  * object is moving *to*).
  *
@@ -45,6 +46,9 @@ public class CachePolicy {
      */
     public static final String NO_STORE = "no-store";
 
+    /** Storage prefix of all profile photos - under public/ so the bucket policy makes them readable. */
+    public static final String AVATAR_PREFIX = "public/avatars/";
+
     public String cacheControlFor(String key) {
         if (key == null) {
             throw new IllegalArgumentException("Storage key must not be null");
@@ -52,7 +56,19 @@ public class CachePolicy {
         if (key.startsWith("private/") || key.startsWith("source/")) {
             return NO_STORE;
         }
-        return isImmutableMediaSegment(key) ? IMMUTABLE : SHORT_LIVED;
+        return isImmutableMediaSegment(key) || isAvatar(key) ? IMMUTABLE : SHORT_LIVED;
+    }
+
+    /**
+     * A profile photo is user-replaceable like a custom thumbnail, but it is never replaced in
+     * place: every upload gets a fresh {@code public/avatars/{userId}/{uuid}.jpg} key (see
+     * AvatarStorage#newKey) and the old object is deleted. A key that is never rewritten is safe to
+     * pin for a year - and it is the only way a replaced photo shows up immediately instead of
+     * after SHORT_LIVED's five minutes (CLAUDE.md 9.8). This rule is only correct as long as
+     * that key scheme holds; it must never be applied to {@code thumbnail*.jpg}.
+     */
+    private boolean isAvatar(String key) {
+        return key.startsWith(AVATAR_PREFIX);
     }
 
     /**

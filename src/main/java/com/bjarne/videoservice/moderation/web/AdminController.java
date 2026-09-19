@@ -83,6 +83,19 @@ public class AdminController {
                 .body(Map.of("enqueuedJobs", transcodeJobLifecycle.enqueueCacheMetadataBackfill()));
     }
 
+    /**
+     * POST with a verb, not DELETE, to match the other moderation actions (block/unblock/dismiss/
+     * uphold): all of them carry a mandatory reason in the body, which DELETE has no defined
+     * semantics for.
+     */
+    @PostMapping("/api/admin/users/{username}/avatar/remove")
+    public ResponseEntity<Void> removeUserAvatar(@PathVariable String username,
+                                                  @Valid @RequestBody ModerationActionRequest request,
+                                                  JwtAuthenticationToken authentication) {
+        adminService.removeUserAvatar(username, adminUserId(authentication), request.reason());
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/api/admin/reports")
     public CursorPage<AdminReportDto> listReports(@RequestParam(required = false) ReportStatus status,
                                                     @RequestParam(required = false) String cursor,

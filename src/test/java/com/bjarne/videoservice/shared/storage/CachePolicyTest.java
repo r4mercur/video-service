@@ -51,6 +51,21 @@ class CachePolicyTest {
     }
 
     /**
+     * Profile photos get a fresh key per upload (CLAUDE.md 9.8), so unlike thumbnails they are
+     * safe to pin - but only under the avatar prefix. The same filename shape anywhere else must
+     * keep falling back to the short policy.
+     */
+    @Test
+    void avatarsAreImmutableOnlyUnderTheAvatarPrefix() {
+        String avatarKey = "public/avatars/5c4efbcc-8e86-4686-9090-62de86cd8714/0f8fad5b-d9cb-469f-a165-70867728950e.jpg";
+        assertThat(policy.cacheControlFor(avatarKey)).isEqualTo(CachePolicy.IMMUTABLE);
+        assertThat(policy.cacheControlFor(PUBLIC_PREFIX + "/0f8fad5b-d9cb-469f-a165-70867728950e.jpg"))
+                .isEqualTo(CachePolicy.SHORT_LIVED);
+        assertThat(policy.cacheControlFor(PUBLIC_PREFIX + "/avatars/thumbnail_custom.jpg"))
+                .isEqualTo(CachePolicy.SHORT_LIVED);
+    }
+
+    /**
      * Private objects reach the browser only through presigned URLs with a 3 h expiry
      * (CLAUDE.md 9.3). Caching them past that would outlive the guard.
      */

@@ -24,18 +24,21 @@ public class RateLimiter {
     private final RateLimitProperties.Limit reportLimit;
     private final RateLimitProperties.Limit reportAnonymousLimit;
     private final RateLimitProperties.Limit playbackTelemetryLimit;
+    private final RateLimitProperties.Limit avatarUploadLimit;
 
     private final Cache<String, Bucket> loginBuckets;
     private final Cache<String, Bucket> registerBuckets;
     private final Cache<String, Bucket> reportBuckets;
     private final Cache<String, Bucket> reportAnonymousBuckets;
     private final Cache<String, Bucket> playbackTelemetryBuckets;
+    private final Cache<String, Bucket> avatarUploadBuckets;
 
     private final Counter loginRejections;
     private final Counter registerRejections;
     private final Counter reportRejections;
     private final Counter reportAnonymousRejections;
     private final Counter playbackTelemetryRejections;
+    private final Counter avatarUploadRejections;
 
     public RateLimiter(RateLimitProperties properties, MeterRegistry meterRegistry) {
         this.loginLimit = properties.login();
@@ -43,16 +46,19 @@ public class RateLimiter {
         this.reportLimit = properties.report();
         this.reportAnonymousLimit = properties.reportAnonymous();
         this.playbackTelemetryLimit = properties.playbackTelemetry();
+        this.avatarUploadLimit = properties.avatarUpload();
         this.loginBuckets = buildCache(loginLimit);
         this.registerBuckets = buildCache(registerLimit);
         this.reportBuckets = buildCache(reportLimit);
         this.reportAnonymousBuckets = buildCache(reportAnonymousLimit);
         this.playbackTelemetryBuckets = buildCache(playbackTelemetryLimit);
+        this.avatarUploadBuckets = buildCache(avatarUploadLimit);
         this.loginRejections = rejectionCounter(meterRegistry, "login");
         this.registerRejections = rejectionCounter(meterRegistry, "register");
         this.reportRejections = rejectionCounter(meterRegistry, "report");
         this.reportAnonymousRejections = rejectionCounter(meterRegistry, "report_anonymous");
         this.playbackTelemetryRejections = rejectionCounter(meterRegistry, "playback_telemetry");
+        this.avatarUploadRejections = rejectionCounter(meterRegistry, "avatar_upload");
     }
 
     public boolean tryConsumeLogin(String ip) {
@@ -77,6 +83,11 @@ public class RateLimiter {
      */
     public boolean tryConsumePlaybackTelemetry(String ip) {
         return tryConsume(playbackTelemetryBuckets, ip, playbackTelemetryLimit, playbackTelemetryRejections);
+    }
+
+    /** Keyed by user ID: uploading a profile photo always requires an account. */
+    public boolean tryConsumeAvatarUpload(String userId) {
+        return tryConsume(avatarUploadBuckets, userId, avatarUploadLimit, avatarUploadRejections);
     }
 
     private boolean tryConsume(Cache<String, Bucket> cache, String key, RateLimitProperties.Limit limit,

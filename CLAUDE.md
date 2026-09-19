@@ -186,7 +186,7 @@ Tests mirror the package of the class under test (`catalog/service/VisibilityPol
 
 ```
 users             id(uuid) email(citext unique) username(unique) password_hash
-                  role(USER|ADMIN) status(ACTIVE|SUSPENDED) created_at
+                  role(USER|ADMIN) status(ACTIVE|SUSPENDED) avatar_key created_at
 
 refresh_tokens    id user_id token_hash expires_at revoked_at replaced_by user_agent
 
@@ -251,7 +251,10 @@ New columns and their reasons:
 | GET | `/api/videos` | optional | `?category=&sort=&cursor=&limit=` |
 | GET | `/api/videos/{slug}` | optional | Detail, 404 for someone else's `PRIVATE` |
 | GET | `/api/me/videos` | JWT | Own videos incl. `PRIVATE` |
+| GET | `/api/users/{username}` | – | Public profile for the channel header: username + avatar URL, never the email |
 | GET | `/api/users/{username}/videos` | optional | Channel page, `PUBLIC` only |
+| PUT | `/api/me/avatar` | JWT | Upload profile photo (multipart, `file` field), per-user rate-limited (§9.8) |
+| DELETE | `/api/me/avatar` | JWT | Remove own profile photo, back to initials |
 | GET | `/api/search/videos` | – | `?q=&sort=relevance\|newest&page=&includeAgeRestricted=` — title search (pg_trgm, typo-tolerant), `PUBLIC` only, numbered pages of 50 (§3.2 exception) |
 | POST | `/api/videos` | JWT | Initiate upload → `videoId` + part URLs |
 | POST | `/api/videos/{id}/complete` | JWT+Owner | Complete multipart → job |
@@ -265,6 +268,7 @@ New columns and their reasons:
 | POST | `/api/videos/{id}/view` | – | View counting, deduplicated |
 | POST | `/api/playback/telemetry` | – | Real-user playback metrics from hls.js; anonymous, IP-rate-limited (§9.6) |
 | GET/POST | `/api/admin/**` | ADMIN | Categories, reports, bans |
+| POST | `/api/admin/users/{username}/avatar/remove` | ADMIN | Remove a profile photo; reason required, audit-logged (§9.8, §12). `409` if there is none |
 | POST | `/api/admin/videos/cache-metadata-backfill` | ADMIN | One-off: re-stamp `Cache-Control` on objects uploaded before `CachePolicy` existed (§9.3) |
 
 > For someone else's `PRIVATE` video: **404, not 403** — 403 would confirm the video's existence.
@@ -400,7 +404,8 @@ owner can replace it with their own image via `PUT /api/videos/{id}/thumbnail`.
   that already fetched the old image would otherwise never see a replacement. Since delivery no
   longer passes through Caddy, this is now enforced at write time: `CachePolicy` must return
   `max-age=300` for `.jpg` keys, and the thumbnail `PutObjectRequest` must never inherit the
-  segment policy. **This is the single easiest place in the codebase to introduce a bug that is
+  segment policy. (Sole exception: profile photos under `public/avatars/`, which are never
+  rewritten in place — see §9.8.) **This is the single easiest place in the codebase to introduce a bug that is
   invisible for a year.** Cover it with a test that asserts the header on the request object.
 
 ### 9.5 Visibility changes
@@ -453,6 +458,17 @@ It therefore runs as a job, like §9.5:
 > **Why not `@Async` or a thread pool and an early `200`.** Work in an in-memory executor is lost on every restart or deploy, has no retry and leaves no record — orphaned objects nobody knows about. §12's deletion concept requires a deletion request to demonstrably complete.
 >
 > **Why not parallel deletes inside the request.** `StoragePrefixMover` already uses `DeleteObjects` in batches of 1,000, so a full-length video is about six delete calls. When that is slow, the time is spent inside the provider per batch; parallelism buys a constant factor, not a guarantee against the timeout.
+
+### 9.8 Profile photos
+
+A user can replace the initials shown for them with a photo. It appears in the header, next to the uploader on the video detail page (`VideoDetailDto.ownerAvatarUrl`) and in the channel header (`GET /api/users/{username}`). Feed, search and channel *cards* deliberately do not carry it — that would widen every list query for a 24-pixel image.
+
+- **Upload** is a direct `multipart/form-data` request to `PUT /api/me/avatar`, handled synchronously in the `api` process — the same reasoning as custom thumbnails (§9.4): a few MB, hard-capped (`app.avatar.max-size-bytes`, 5 MB), one ffmpeg frame.
+- **Normalization:** ffmpeg center-crops to a square and scales to 256×256 JPEG. The frontend never sees an arbitrary aspect ratio, and the stored object is a few KB whatever was uploaded.
+- ⚠️ **ffmpeg input is restricted** with `-format_whitelist` (`FfmpegRunner.STILL_IMAGE_INPUT_FORMATS`) to still-image demuxers — here and for custom thumbnails (§9.4). Without it ffmpeg auto-detects the format, and an uploaded text file in HLS or concat syntax can make it open local files or URLs. Every future path that feeds a user-uploaded image to ffmpeg must pass it too.
+- **Key and cache:** every upload gets a fresh key `public/avatars/{userId}/{uuid}.jpg`, the previous object is deleted after the transaction commits. Because a key is never rewritten, `CachePolicy` gives this prefix the `immutable` policy — **the one exception to §9.4's "`.jpg` means `max-age=300`"**, and valid only as long as the key scheme holds. A replaced photo is therefore visible immediately instead of after five minutes.
+- **Moderation:** a profile photo is public user content (§12). Admins remove one via `POST /api/admin/users/{username}/avatar/remove` with a mandatory reason, written to `audit_log` as `AVATAR_REMOVED` with `target_user_id`. There is no separate report flow for profiles.
+- **Multipart limit:** `spring.servlet.multipart.max-file-size` is 8 MB — the largest per-feature cap (thumbnails). Spring's 1 MB default had silently undercut both caps before. A file just over the limit gets a `413`; a request far over `max-request-size` (9 MB) is refused before its body is read, and once the unread remainder exceeds Tomcat's `max-swallow-size` (2 MB) the connection is simply closed — the browser sees a network error (behind Caddy: `502`), not a `413`. ⚠️ **The frontend must check the file size before uploading**; the server-side limits are only the backstop.
 
 ---
 
@@ -526,6 +542,7 @@ The object storage decision in §2.1 adds obligations of its own:
 - **Data processing agreement** with Hetzner covering both the Cloud server and Object Storage. User-uploaded video is personal data as soon as people are identifiable in it, which for a video platform is the default assumption.
 - **Storage location** must be documented in the privacy policy. Keeping server and bucket in the same German location keeps this to one sentence — this is a substantial part of why Hetzner Object Storage was chosen over Cloudflare R2, which would require a third-country transfer assessment.
 - **Deletion concept** must account for the lifecycle rule in §9.2. A deletion request has to remove the renditions, the thumbnails *and* any retained source object — the 30-day source retention is a processing purpose that needs to appear in the record of processing activities, not an implementation detail.
+- **Profile photos** (§9.8) are personal data by definition. Account deletion does not exist yet; when it is built, it must empty `public/avatars/{userId}/` as a whole — that prefix also catches objects orphaned by a failed cleanup after a replacement.
 
 Actual legal drafting — terms of service, privacy policy, procedural deadlines — requires legal counsel. This plan does not replace it.
 

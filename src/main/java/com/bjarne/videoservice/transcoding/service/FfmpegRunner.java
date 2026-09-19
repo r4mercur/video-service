@@ -28,6 +28,20 @@ public class FfmpegRunner {
     private static final Logger log = LoggerFactory.getLogger(FfmpegRunner.class);
 
     /**
+     * Value for {@code -format_whitelist} whenever ffmpeg reads a user-uploaded still image
+     * (custom thumbnails, profile photos). Without it, ffmpeg auto-detects the input format, and
+     * an uploaded text file in HLS or concat syntax can make it open local files or URLs - the
+     * well-known ffmpeg SSRF/local-file-read vector. Recent ffmpeg versions refuse HLS under a
+     * non-standard extension on their own; the whitelist makes that independent of the version
+     * the Docker image happens to ship. The *_pipe names are what content probing picks for these
+     * formats; image2 covers extension-based detection. Must be passed before {@code -i}.
+     *
+     * Not for video sources: the transcode path has to accept whatever containers users upload
+     * and relies on ffprobe validation (CLAUDE.md 9.2) instead.
+     */
+    public static final String STILL_IMAGE_INPUT_FORMATS = "png_pipe,jpeg_pipe,webp_pipe,gif,image2";
+
+    /**
      * Runs the command and returns the combined stdout/stderr output
      * (ffprobe writes its JSON to stdout, ffmpeg diagnostics go via stderr).
      */

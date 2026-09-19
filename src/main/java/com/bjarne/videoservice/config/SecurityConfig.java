@@ -111,6 +111,7 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/categories"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/users/*"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/users/*/videos"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/manifest"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/videos/*/master.m3u8"),
@@ -212,7 +213,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories", "/api/search/videos", "/api/videos", "/api/videos/*",
-                                "/api/users/*/videos", "/api/videos/*/manifest", "/api/videos/*/master.m3u8",
+                                "/api/users/*", "/api/users/*/videos", "/api/videos/*/manifest", "/api/videos/*/master.m3u8",
                                 "/api/videos/*/*/playlist.m3u8").permitAll()
                         // Playback telemetry is anonymous for the same reason view counting is:
                         // watching needs no account (CLAUDE.md 1), so requiring one would blind
